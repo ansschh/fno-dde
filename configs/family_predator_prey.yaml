@@ -1,0 +1,34 @@
+# Configuration for 2D Predator-Prey DDE Family
+# x'(t) = x(t) * (alpha - beta * y(t - tau1))
+# y'(t) = y(t) * (-delta + gamma * x(t - tau2))
+
+family: predator_prey
+
+# Data settings
+data_dir: data/processed
+batch_size: 32
+num_workers: 4
+
+# Model settings - wider for 2D state
+model:
+  modes: 20
+  width: 96
+  n_layers: 5
+  activation: gelu
+  padding: 16
+
+use_residual: true
+
+# Training settings
+epochs: 150
+lr: 5e-4
+lr_min: 1e-6
+weight_decay: 1e-4
+grad_clip: 1.0
+save_every: 10
+
+# Dataset generation settings
+n_samples: 1500
+n_hist_points: 64
+n_future_points: 192
+seed: 42

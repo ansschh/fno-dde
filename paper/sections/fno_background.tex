@@ -1,0 +1,54 @@
+% FNO Background
+
+Fourier Neural Operators (FNOs) are a class of neural network architectures designed to learn
+mappings between function spaces~\citep{li2020fno}. Unlike traditional neural networks that
+operate on fixed-dimensional vectors, FNOs are designed to be discretization-invariant and
+can generalize across different resolutions.
+
+\subsection{Architecture Overview}
+
+An FNO consists of the following components:
+
+\paragraph{Lifting layer.}
+The input function $a(x)$ is lifted to a higher-dimensional representation via a pointwise
+linear transformation: $v_0(x) = P(a(x))$.
+
+\paragraph{Fourier layers.}
+The core of the FNO is a sequence of Fourier layers. Each layer applies:
+\begin{equation}
+  v_{l+1}(x) = \sigma\Bigl( W_l v_l(x) + \mathcal{K}_l(v_l)(x) \Bigr),
+\end{equation}
+where $W_l$ is a pointwise linear transformation (1$\times$1 convolution), $\sigma$ is a
+nonlinearity (e.g., GELU), and $\mathcal{K}_l$ is a spectral convolution operator.
+
+\paragraph{Spectral convolution.}
+The spectral convolution is defined via the Fourier transform:
+\begin{equation}
+  \mathcal{K}_l(v)(x) = \mathcal{F}^{-1}\bigl( R_l \cdot \mathcal{F}(v) \bigr)(x),
+\end{equation}
+where $\mathcal{F}$ denotes the Fourier transform and $R_l$ is a learnable tensor that
+multiplies the Fourier coefficients. Only a finite number of Fourier modes are retained.
+
+\paragraph{Projection layer.}
+The final representation is projected back to the output dimension via another pointwise
+linear transformation: $u(x) = Q(v_L(x))$.
+
+\subsection{Properties}
+
+\paragraph{Discretization invariance.}
+Since the Fourier transform is defined on continuous functions, FNOs can (in principle)
+generalize across different discretizations of the input/output functions.
+
+\paragraph{Global receptive field.}
+Each Fourier layer has a global receptive field due to the spectral convolution, allowing
+the network to capture long-range dependencies.
+
+\paragraph{Efficiency.}
+The spectral convolution can be computed efficiently using the Fast Fourier Transform (FFT),
+making FNOs computationally tractable for high-resolution inputs.
+
+\subsection{Application to DDEs}
+
+For DDEs, we use a 1D FNO over the time dimension. The input consists of the history function
+(and parameters) encoded on a grid covering $[-\tau_{\max}, T]$, and the output is the solution
+trajectory on the same grid. The loss is computed only on the future portion $[0, T]$.

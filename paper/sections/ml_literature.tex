@@ -1,0 +1,45 @@
+% ML Literature for DDEs
+
+Machine learning with delays appears in several ways:
+\begin{enumerate}
+  \item[(i)] continuous-depth models explicitly parameterized as neural DDEs,
+  \item[(ii)] learning unknown delays as part of system identification,
+  \item[(iii)] PINN-style solvers adapted to delayed residuals,
+  \item[(iv)] operator-learning methods (e.g., DeepONets, neural operators) trained on paired data.
+\end{enumerate}
+
+\subsection{Neural Delay Differential Equations}
+
+Neural DDEs extend Neural ODEs by introducing explicit delayed arguments and adjoint-based training.
+The key idea is to parameterize the right-hand side of a DDE with a neural network:
+\begin{equation}
+  \dot{x}(t) = f_\theta\bigl(t, x(t), x(t-\tau)\bigr),
+\end{equation}
+where $f_\theta$ is a neural network. Training proceeds via the adjoint method, extended to
+handle the delayed terms~\citep{zhu2021ndde}.
+
+\subsection{Learning Unknown Delays}
+
+Recent work addresses the problem of learning the delay parameters themselves from data.
+\citet{stephany2024learningdelay} propose methods for inferring unknown delays in DDEs from
+observed trajectories, which is important for system identification in applications where
+the delay structure is not known a priori.
+
+\subsection{State and Time-Dependent Neural DDEs}
+
+Extensions to state-dependent and time-dependent delays have been explored~\citep{monsel2024sddde},
+which significantly increases the expressiveness of neural DDE models but also introduces
+additional computational challenges.
+
+\subsection{Physics-Informed Neural Networks for DDEs}
+
+Physics-informed approaches have been adapted for DDEs by incorporating the delayed residual
+into the loss function. However, handling the history function and the non-local nature of
+the delay term requires careful treatment.
+
+\subsection{Operator Learning}
+
+Operator learning methods such as DeepONets~\citep{wang2021pideeponet} and Fourier Neural
+Operators~\citep{li2020fno} learn mappings between function spaces. For DDEs, the natural
+formulation is to learn the operator from history functions (and parameters) to solution
+trajectories, which is the approach we pursue in this work.

@@ -1,0 +1,37 @@
+% DDE Numerics
+
+Numerical solution of DDEs typically extends ODE solvers using the \emph{method of steps}:
+the solution is advanced over successive intervals while evaluating delayed terms using stored
+past values and interpolation. Even for constant delays, solutions can exhibit derivative
+discontinuities at ``breaking points'' that propagate at multiples of the delays, which motivates
+discontinuity tracking and careful dense output (interpolation) strategies.
+
+Practical DDE solvers therefore require:
+\begin{enumerate}
+  \item[(i)] storing solution history over a moving window,
+  \item[(ii)] dense output / interpolation to evaluate $x(t-\tau)$ at off-grid times,
+  \item[(iii)] mechanisms for handling discontinuities and events, and
+  \item[(iv)] for distributed delays, numerical quadrature or auxiliary-state reformulations.
+\end{enumerate}
+
+\subsection{The Method of Steps}
+
+For a DDE with constant delay $\tau$, the method of steps proceeds as follows:
+\begin{enumerate}
+  \item On $[0, \tau]$: the delayed term $x(t-\tau) = \phi(t-\tau)$ is known from the history,
+        so the DDE reduces to an ODE.
+  \item On $[\tau, 2\tau]$: the delayed term uses the solution computed in step 1.
+  \item Continue inductively for $[k\tau, (k+1)\tau]$.
+\end{enumerate}
+
+\subsection{Discontinuity Tracking}
+
+Even with smooth history functions, the solution $x(t)$ may have discontinuities in its
+derivatives at multiples of the delay. Good solvers (e.g., MATLAB's \texttt{dde23}) explicitly
+track these ``breaking points'' and restart the integration there.
+
+\subsection{Dense Output}
+
+Since $x(t-\tau)$ is needed at arbitrary times (not just grid points), solvers must provide
+\emph{dense output}---interpolation of the solution between mesh points. This is typically
+achieved using the same polynomial interpolants used in the underlying ODE method.

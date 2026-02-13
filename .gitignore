@@ -1,0 +1,44 @@
+# Data files
+data/
+data_*/
+*.npz
+*.h5
+*.hdf5
+
+# Model outputs / checkpoints
+outputs/
+*.pt
+*.pth
+*.ckpt
+
+# Reports and figures (regenerated)
+reports/
+slurm_logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temp
+*.tmp
+*.bak

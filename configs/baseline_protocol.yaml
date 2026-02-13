@@ -1,0 +1,154 @@
+# =============================================================================
+# BASELINE PROTOCOL v1 - Apples-to-Apples Contract
+# =============================================================================
+# This file locks the data grid, model architecture, and normalization policy
+# for all 5 DDE families in the baseline-all-5 benchmark.
+# DO NOT MODIFY after baseline_all5_frozen tag.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data Grid (identical for all families)
+# -----------------------------------------------------------------------------
+data:
+  tau_max: 2.0          # Maximum delay / history window
+  T: 20.0               # Solution horizon (training)
+  T_ood_horizon: 40.0   # Extended horizon for OOD-horizon test
+  dt_out: 0.05          # Output time step
+  n_hist: 256           # History grid points (covers [-tau_max, 0))
+  n_out: 401            # Output grid points (covers [0, T])
+  # Total input length: n_hist + n_out = 657
+
+# -----------------------------------------------------------------------------
+# Dataset Sizes
+# -----------------------------------------------------------------------------
+dataset:
+  n_train: 50000
+  n_val: 2000
+  n_test: 2000
+  n_ood: 2000           # Per OOD split
+
+# -----------------------------------------------------------------------------
+# OOD Split Definitions
+# -----------------------------------------------------------------------------
+ood_splits:
+  # OOD-delay: extrapolation to larger delays
+  ood_delay:
+    type: "conditional_subset"  # Not true extrapolation since ID covers full range
+    description: "Test samples with tau > 1.3 (single-delay) or max(tau1,tau2) > 1.3 (two-delay)"
+    tau_threshold: 1.3
+    
+  # OOD-delay-hole: interpolation gap
+  ood_delay_hole:
+    type: "interpolation_gap"
+    description: "Train excludes tau in [0.9, 1.1], test uses that band"
+    hole_range: [0.9, 1.1]
+    
+  # OOD-history: distribution shift in history function
+  ood_history:
+    type: "distribution_shift"
+    description: "Spline histories instead of Fourier (same tau/params as ID)"
+    
+  # OOD-horizon: temporal extrapolation
+  ood_horizon:
+    type: "temporal_extrapolation"
+    description: "T=40 instead of T=20 (same distribution as ID)"
+
+# -----------------------------------------------------------------------------
+# Model Architecture (Small FNO v2 - 93k params)
+# -----------------------------------------------------------------------------
+model:
+  modes: 12
+  width: 48
+  n_layers: 3
+  dropout: 0.1
+  use_residual: true
+  # Computed: ~93k parameters
+
+# -----------------------------------------------------------------------------
+# Training Configuration
+# -----------------------------------------------------------------------------
+training:
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.001
+  epochs: 100
+  early_stopping_patience: 15
+  scheduler: "plateau"
+  scheduler_patience: 5
+  scheduler_factor: 0.5
+
+# -----------------------------------------------------------------------------
+# Normalization Policy
+# -----------------------------------------------------------------------------
+normalization:
+  policy: "train_only"
+  description: |
+    All normalization statistics (phi_mean/std, y_mean/std, param_mean/std)
+    are computed from ID train split ONLY.
+    These stats are saved in manifest and used for:
+      - Training
+      - ID evaluation (train/val/test)
+      - ALL OOD evaluation
+    OOD datasets must NOT recompute normalization stats independently.
+
+# -----------------------------------------------------------------------------
+# Evaluation Metrics
+# -----------------------------------------------------------------------------
+evaluation:
+  primary_metric: "relL2_orig"  # Relative L2 in original (denormalized) space
+  mask: "future_only"           # Only evaluate on t > 0 (prediction region)
+  stats: ["median", "p95", "mean", "std"]
+
+# -----------------------------------------------------------------------------
+# Family-Specific Notes
+# -----------------------------------------------------------------------------
+families:
+  hutch:
+    state_dim: 1
+    delays: ["tau"]
+    requires_positive: true
+    param_names: ["r", "K", "tau"]
+    
+  linear2:
+    state_dim: 1
+    delays: ["tau1", "tau2"]
+    requires_positive: false
+    param_names: ["a", "b1", "b2", "tau1", "tau2"]
+    ood_delay_key: "max(tau1, tau2)"
+    
+  vdp:
+    state_dim: 2
+    delays: ["tau"]
+    requires_positive: false
+    param_names: ["mu", "kappa", "tau"]
+    
+  dist_uniform:
+    state_dim: 2
+    delays: ["tau"]
+    requires_positive: true
+    param_names: ["r", "K", "tau"]
+    note: "Auxiliary m tracks moving average"
+    
+  dist_exp:
+    state_dim: 2
+    delays: ["tau"]
+    requires_positive: true
+    param_names: ["r", "K", "lam", "tau"]
+    note: "Finite-window exponential kernel with discrete lag x(t-tau)"
+
+# -----------------------------------------------------------------------------
+# Solver Configuration
+# -----------------------------------------------------------------------------
+solver:
+  backend: "python"      # scipy-based method-of-steps
+  rtol: 1.0e-6
+  atol: 1.0e-9
+  max_step: 0.025        # dt_out / 2
+
+# -----------------------------------------------------------------------------
+# Version Control
+# -----------------------------------------------------------------------------
+version:
+  protocol: "1.0"
+  created: "2025-12-28"
+  frozen_tag: "baseline_all5_frozen"  # To be created after Phase 7

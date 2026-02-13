@@ -1,0 +1,8 @@
+[deps]
+DataInterpolations = "82cc6244-b520-54b8-b369-a6b4c787fcc8"
+DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+NPZ = "15e1cf62-19b3-5cfa-8e77-841668bber9"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

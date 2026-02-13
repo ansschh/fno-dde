@@ -1,0 +1,53 @@
+# Input Encoding Ablation Configurations
+# Test what information FNO actually needs
+
+description: "Input encoding ablation study"
+
+# Full encoding (baseline)
+full:
+  channels:
+    - history      # φ(t) for t≤0, 0 for t>0
+    - mask         # 1 for t≤0, 0 for t>0
+    - time         # normalized time coordinate
+    - params       # parameters broadcast across time
+  description: "Full encoding (history + mask + time + params)"
+
+# Ablation variants
+no_mask:
+  channels:
+    - history
+    - time
+    - params
+  description: "No mask channel"
+
+no_time:
+  channels:
+    - history
+    - mask
+    - params
+  description: "No time channel"
+
+no_params:
+  channels:
+    - history
+    - mask
+    - time
+  description: "No parameters - should fail when param variation matters"
+
+history_only:
+  channels:
+    - history
+  description: "History only - minimal encoding"
+
+history_params:
+  channels:
+    - history
+    - params
+  description: "History + params only"
+
+# Expected outcomes:
+# - full: best performance
+# - no_mask: slightly worse, boundary effects
+# - no_time: slightly worse for non-periodic
+# - no_params: poor on families with strong param dependence
+# - history_only: baseline, no param generalization

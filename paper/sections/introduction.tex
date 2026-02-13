@@ -1,0 +1,25 @@
+% Introduction
+
+Delay differential equations (DDEs) arise naturally in many scientific and engineering domains
+where the rate of change of a system depends not only on its current state but also on its past
+states. Applications include population dynamics, control systems with communication delays,
+epidemiology, and neuroscience.
+
+The initial value problem for a DDE defines an operator
+\begin{equation}
+  \mathcal{G}: (\phi, \theta) \mapsto x(\cdot) \text{ on } [0,T],
+\end{equation}
+where $\phi$ is the history function on $[-\tau_{\max}, 0]$, $\theta$ are parameters (rates,
+delays, etc.), and the output is the trajectory $x(t)$ for $t \in [0,T]$.
+
+This ``history-to-future function'' structure is exactly what neural operators are designed for.
+In this work, we explore whether Fourier Neural Operators (FNOs)---originally developed for
+parametric partial differential equations---can effectively learn the solution operator for
+families of DDEs.
+
+Our contributions are:
+\begin{itemize}
+  \item A benchmark suite of five DDE families spanning discrete and distributed delays,
+  \item A dataset generation pipeline with careful treatment of history functions and solver accuracy,
+  \item Baseline FNO experiments demonstrating the feasibility of operator learning for DDEs.
+\end{itemize}

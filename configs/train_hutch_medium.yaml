@@ -1,0 +1,26 @@
+# Training config for Hutchinson DDE - MEDIUM capacity
+family: hutch
+
+batch_size: 32
+num_workers: 4
+
+# Model settings - medium capacity (v1 size + regularization)
+model:
+  modes: 16
+  width: 64
+  n_layers: 4
+  activation: gelu
+  padding: 8
+  dropout: 0.1
+
+use_residual: true
+
+# Training settings
+epochs: 150
+lr: 0.001
+lr_min: 0.000001
+scheduler: cosine
+weight_decay: 0.001
+grad_clip: 1.0
+save_every: 10
+patience: 30

@@ -1,0 +1,26 @@
+# Training config for Hutchinson DDE - OVERFIT TEST
+family: hutch
+
+batch_size: 64
+num_workers: 0
+
+# Model settings - medium capacity for overfit test
+model:
+  modes: 16
+  width: 64
+  n_layers: 4
+  activation: gelu
+  padding: 8
+  dropout: 0.0
+
+use_residual: false
+
+# Training settings - long training, no regularization
+epochs: 2000
+lr: 0.001
+lr_min: 0.0001
+scheduler: cosine
+weight_decay: 0.0
+grad_clip: 0.0
+save_every: 100
+patience: 2000

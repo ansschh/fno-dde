@@ -1,0 +1,26 @@
+# Training config for Chaotic Mackey-Glass DDE family
+# Long history (tau_max=30), long horizon (T=100), chaotic dynamics
+family: chaotic_mg
+
+batch_size: 16
+num_workers: 4
+
+# Larger model needed for long sequences (~1300 points)
+model:
+  modes: 32
+  width: 64
+  n_layers: 4
+  activation: gelu
+  padding: 8
+  dropout: 0.1
+
+use_residual: true
+
+epochs: 200
+lr: 0.001
+lr_min: 0.000001
+scheduler: cosine
+weight_decay: 0.001
+grad_clip: 1.0
+save_every: 20
+patience: 40

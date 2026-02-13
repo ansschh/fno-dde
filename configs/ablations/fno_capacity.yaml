@@ -1,0 +1,75 @@
+# FNO Capacity Ablation Configurations
+# Vary modes, width, and depth to study scaling behavior
+
+description: "FNO capacity sweep for scaling curves"
+
+# Base configuration (inherited by all variants)
+base:
+  batch_size: 32
+  epochs: 100
+  lr: 1e-3
+  lr_min: 1e-6
+  weight_decay: 1e-4
+  grad_clip: 1.0
+  activation: gelu
+  padding: 8
+
+# Capacity variants
+variants:
+  # Small models
+  small_shallow:
+    modes: 8
+    width: 32
+    n_layers: 4
+    description: "Small shallow (8 modes, 32 width, 4 layers)"
+    
+  small_deep:
+    modes: 8
+    width: 32
+    n_layers: 6
+    description: "Small deep (8 modes, 32 width, 6 layers)"
+    
+  # Medium models
+  medium_narrow:
+    modes: 16
+    width: 32
+    n_layers: 4
+    description: "Medium narrow (16 modes, 32 width, 4 layers)"
+    
+  medium_baseline:
+    modes: 16
+    width: 64
+    n_layers: 4
+    description: "Medium baseline (16 modes, 64 width, 4 layers)"
+    
+  medium_wide:
+    modes: 16
+    width: 128
+    n_layers: 4
+    description: "Medium wide (16 modes, 128 width, 4 layers)"
+    
+  medium_deep:
+    modes: 16
+    width: 64
+    n_layers: 6
+    description: "Medium deep (16 modes, 64 width, 6 layers)"
+    
+  # Large models
+  large_modes:
+    modes: 32
+    width: 64
+    n_layers: 4
+    description: "Large modes (32 modes, 64 width, 4 layers)"
+    
+  large_full:
+    modes: 32
+    width: 128
+    n_layers: 6
+    description: "Large full (32 modes, 128 width, 6 layers)"
+
+# Recommended sweep order (quick to slow)
+sweep_order:
+  - small_shallow
+  - medium_baseline
+  - medium_wide
+  - large_modes

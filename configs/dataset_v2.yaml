@@ -1,0 +1,175 @@
+# Dataset V2: All DDE + PDE families
+# Master configuration for the hard benchmark extension
+
+# ============================================================
+# DDE Families
+# ============================================================
+dde_families:
+  # --- Original baseline families ---
+  linear2:
+    n_grid: 256
+    tau_max: 2.0
+    T: 10.0
+    state_dim: 2
+
+  hutch:
+    n_grid: 256
+    tau_max: 2.0
+    T: 10.0
+    state_dim: 1
+
+  mackey_glass:
+    n_grid: 256
+    tau_max: 2.0
+    T: 50.0
+    state_dim: 1
+
+  vdp:
+    n_grid: 256
+    tau_max: 2.0
+    T: 20.0
+    state_dim: 2
+
+  dist_uniform:
+    n_grid: 256
+    tau_max: 2.0
+    T: 10.0
+    state_dim: 1
+
+  dist_exp:
+    n_grid: 256
+    tau_max: 2.0
+    T: 10.0
+    state_dim: 1
+
+  # --- New hard families (Track A) ---
+  neutral:
+    n_grid: 512
+    tau_max: 2.0
+    T: 15.0
+    state_dim: 1
+    notes: "Derivative discontinuities at tau multiples, non-smooth"
+
+  chaotic_mg:
+    n_grid: 1024
+    tau_max: 30.0
+    T: 100.0
+    state_dim: 1
+    notes: "Long history window, chaotic regime, high modes needed"
+
+  forced_duffing:
+    n_grid: 512
+    tau_max: 2.0
+    T: 30.0
+    state_dim: 2
+    notes: "High-freq forcing omega is difficulty knob, multi-scale"
+
+  multi_delay_comb:
+    n_grid: 512
+    tau_max: 3.0
+    T: 15.0
+    state_dim: 1
+    notes: "6 incommensurate delays, spectral interference patterns"
+
+  stiff_vdp:
+    n_grid: 1024
+    tau_max: 2.0
+    T: 30.0
+    state_dim: 2
+    notes: "mu 10-50, sharp relaxation oscillations, needs Radau solver"
+
+# ============================================================
+# PDE Families (Track B)
+# ============================================================
+pde_families:
+  burgers:
+    n_spatial: 256
+    domain: [0, 6.283185307]  # 2*pi
+    T: 1.0
+    state_dim: 1
+    input_type: initial_condition
+    param_ranges:
+      nu: [0.001, 0.1]  # log-uniform sampling
+    notes: "Viscous Burgers, shock formation at low nu"
+
+  ks:
+    n_spatial: 256
+    domain: [0, 22]
+    T: 50.0
+    state_dim: 1
+    input_type: initial_condition
+    param_ranges:
+      L: [22, 100]
+    notes: "Kuramoto-Sivashinsky, spatio-temporal chaos"
+
+  helmholtz:
+    n_spatial: 512
+    domain: [0, 6.283185307]
+    T: 0.0  # steady-state
+    state_dim: 1
+    input_type: multi_channel  # (n(x), f(x)) -> u(x)
+    param_ranges:
+      k: [5, 50]
+    notes: "Helmholtz, need 10+ pts/wavelength at k=50"
+
+  wave:
+    n_spatial: 256
+    domain: [0, 6.283185307]
+    T: 2.0
+    state_dim: 1
+    input_type: multi_channel  # (u0, du0, c(x)) -> u(x, T)
+    notes: "Heterogeneous wave, variable speed c(x)"
+
+# ============================================================
+# OOD Splits
+# ============================================================
+ood_splits:
+  # DDE OOD splits (same as v1)
+  dde:
+    ood_delay:
+      description: "Delays outside training range"
+    ood_history:
+      description: "Different initial history shapes"
+    ood_horizon:
+      description: "Longer prediction horizon"
+
+  # PDE OOD splits
+  pde:
+    burgers:
+      ood_nu:
+        description: "Train nu in [0.01, 0.1], test nu in [0.001, 0.01]"
+      ood_ic_spectrum:
+        description: "Higher-frequency initial conditions"
+
+    ks:
+      ood_L:
+        description: "Larger domain L (more chaotic)"
+      ood_horizon:
+        description: "Longer prediction horizon"
+
+    helmholtz:
+      ood_k:
+        description: "Higher wavenumber (k > 50)"
+      ood_medium:
+        description: "Rougher refractive index n(x)"
+
+    wave:
+      ood_contrast:
+        description: "Higher velocity contrast in c(x)"
+      ood_ic_bandwidth:
+        description: "Higher-frequency initial conditions"
+      ood_horizon:
+        description: "Longer prediction time"
+
+# ============================================================
+# Data Generation Defaults
+# ============================================================
+generation:
+  default_n_train: 10000
+  default_n_val: 2000
+  default_n_test: 2000
+  pilot_n_train: 1600
+  pilot_n_val: 200
+  pilot_n_test: 200
+  shard_size: 64
+  seed: 42

@@ -1,0 +1,35 @@
+# Configuration for Distributed Delay (Moving Average) DDE Family
+# x'(t) = -alpha * x(t) + beta * m(t)
+# m(t) = (1/tau) * integral from t-tau to t of x(s) ds
+# Reformulated as auxiliary system with discrete delay
+
+family: distributed_delay
+
+# Data settings
+data_dir: data/processed
+batch_size: 32
+num_workers: 4
+
+# Model settings
+model:
+  modes: 20
+  width: 80
+  n_layers: 4
+  activation: gelu
+  padding: 12
+
+use_residual: true
+
+# Training settings
+epochs: 150
+lr: 5e-4
+lr_min: 1e-6
+weight_decay: 1e-4
+grad_clip: 1.0
+save_every: 10
+
+# Dataset generation settings
+n_samples: 1000
+n_hist_points: 64
+n_future_points: 192
+seed: 42

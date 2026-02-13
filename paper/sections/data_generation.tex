@@ -1,0 +1,64 @@
+% Data Generation
+
+\subsection{The Operator Learning Problem}
+
+A DDE initial value problem defines an operator
+\begin{equation}
+  \mathcal{G}: (\phi, \theta) \mapsto x(\cdot) \text{ on } [0, T],
+\end{equation}
+where $\phi$ is the history function on $[-\tau_{\max}, 0]$, $\theta$ are parameters, and
+the output is the trajectory $x(t)$ for $t \in [0, T]$.
+
+\subsection{Input/Output Encoding}
+
+We use a combined grid $t \in [-\tau_{\max}, T]$ with $N$ uniformly spaced points.
+
+\paragraph{Input channels.}
+\begin{itemize}
+  \item \textbf{History signal}: $u_{\text{hist}}(t) = \phi(t)$ for $t \le 0$, and $0$ for $t > 0$.
+  \item \textbf{Mask}: $u_{\text{mask}}(t) = 1$ for $t \le 0$, and $0$ for $t > 0$.
+  \item \textbf{Time coordinate}: $u_t(t) = $ normalized $t$ (helps with boundary effects).
+  \item \textbf{Parameters}: $\theta$ broadcast as constant channels across $t$.
+\end{itemize}
+
+\paragraph{Output.}
+The full solution $x(t)$ on $[-\tau_{\max}, T]$. The loss is computed only on $t \in [0, T]$.
+
+\subsection{History Function Sampling}
+
+To avoid trivial histories, we sample smooth random functions:
+
+\paragraph{Random Fourier series.}
+\begin{equation}
+  \phi(t) = c_0 + \sum_{k=1}^{K} \bigl( a_k \cos(2\pi k t / L) + b_k \sin(2\pi k t / L) \bigr),
+\end{equation}
+where $c_0, a_k, b_k$ are sampled randomly. For equations requiring positive solutions,
+we apply a softplus transformation.
+
+\paragraph{Random cubic spline.}
+Alternatively, sample random knot values on $[-\tau_{\max}, 0]$ and interpolate with cubic splines.
+
+\subsection{Solver Requirements}
+
+Ground truth solutions are generated using solvers that handle:
+\begin{itemize}
+  \item History storage over a moving window
+  \item Dense output for evaluating $x(t-\tau)$ at off-grid times
+  \item Discontinuity tracking at breaking points
+  \item For distributed delays: auxiliary-state reformulation
+\end{itemize}
+
+We use Julia's DifferentialEquations.jl (SciML) ecosystem, which provides robust DDE solvers
+with these capabilities.
+
+\subsection{Dataset Configuration}
+
+For each family, we specify:
+\begin{itemize}
+  \item $\tau_{\max}$: maximum delay (history window size)
+  \item $T$: solution horizon
+  \item $N$: number of grid points
+  \item Parameter ranges and sampling distributions
+  \item Solver tolerances (abstol, reltol)
+  \item Random seed for reproducibility
+\end{itemize}

@@ -1,0 +1,37 @@
+% DDE Background
+
+Delay differential equations (DDEs) are functional differential equations in which the rate of
+change of the state depends on past values of the state. A common retarded DDE with discrete
+delays has the form
+\begin{equation}
+  \dot{x}(t) = f\bigl(t, x(t), x(t-\tau_1), \dots, x(t-\tau_m)\bigr),
+\end{equation}
+where the delays $\tau_i > 0$ represent explicit dependence on the past.
+
+Unlike ordinary differential equations (ODEs), an initial value problem for a DDE requires an
+\emph{initial history function} $\phi$ defined on an interval $[-\tau_{\max},0]$:
+\begin{equation}
+  x(t) = \phi(t), \quad t \in [-\tau_{\max}, 0],
+\end{equation}
+where $\tau_{\max} = \max_i \tau_i$. The solution for $t>0$ is then determined by the DDE dynamics.
+
+DDEs are often described as infinite-dimensional dynamical systems because the state at time $t$
+can be viewed as the history segment $x_t(\theta) := x(t+\theta)$ for $\theta\in[-\tau_{\max},0]$,
+i.e., an element of a function space rather than a finite-dimensional vector.
+
+\subsection{Types of Delays}
+
+\paragraph{Discrete delays.}
+The simplest case involves fixed delays $\tau_1, \dots, \tau_m$, where the right-hand side
+depends on $x(t-\tau_i)$ for specific values.
+
+\paragraph{Distributed delays.}
+More generally, the dependence on the past can involve an integral over a memory kernel:
+\begin{equation}
+  \dot{x}(t) = f\Bigl(t, x(t), \int_{-\infty}^{t} K(t-s) x(s)\, ds\Bigr).
+\end{equation}
+Common kernels include uniform (moving average) and exponential decay.
+
+\paragraph{State-dependent delays.}
+In some systems, the delay itself depends on the state: $\tau = \tau(x(t))$. These are
+significantly more challenging both analytically and numerically.

@@ -1,0 +1,822 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[margin=1in]{geometry}
+
+% Graphics path
+\graphicspath{{figures/}}
+
+% Custom commands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\relL}{\text{relL}_2}
+\newcommand{\norm}[1]{\left\|#1\right\|}
+\newcommand{\abs}[1]{\left|#1\right|}
+
+\title{Fourier Neural Operators for Delay Differential Equations:\\
+Initial Experimental Report}
+
+\author{DDE-FNO Research Team}
+
+\date{December 2024}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present a systematic investigation of Fourier Neural Operators (FNOs) for learning solution operators of delay differential equations (DDEs). Unlike ordinary differential equations, DDEs incorporate temporal memory through delayed state variables, presenting unique challenges for neural operator learning. We establish a benchmark suite of five DDE families spanning discrete delays, distributed delays, and multi-delay interactions. Our experiments reveal that while FNOs can achieve strong in-distribution performance (median relative $L^2$ error of 2--6\% on easier families), significant challenges remain in out-of-distribution generalization, particularly for delay extrapolation (up to 6.7$\times$ degradation) and history distribution shift (up to 7$\times$ degradation). We document the complete experimental pipeline including data generation, quality control, training protocol, and evaluation methodology to serve as a foundation for future research on neural operators for functional differential equations.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+Delay differential equations (DDEs) are a fundamental class of functional differential equations where the rate of change depends not only on the current state but also on past states:
+\begin{equation}
+    \frac{dx}{dt}(t) = f\bigl(t, x(t), x(t-\tau_1), \ldots, x(t-\tau_k)\bigr)
+\end{equation}
+where $\tau_i > 0$ are the delay values. DDEs arise naturally in numerous applications including population dynamics, control systems, epidemiology, and neural networks, where feedback mechanisms operate with inherent time lags.
+
+Unlike ordinary differential equations (ODEs), DDEs require a \textit{history function} $\phi: [-\tau_{\max}, 0] \to \R^d$ as an initial condition, rather than just an initial point. This fundamentally changes the operator learning problem: we must learn a map from function space to function space.
+
+\subsection{Problem Formulation}
+
+The DDE initial value problem defines a solution operator:
+\begin{equation}
+    \mathcal{G}: (\phi, \theta) \mapsto x(\cdot) \text{ on } [0, T]
+\end{equation}
+where $\phi$ is the history function on $[-\tau_{\max}, 0]$, $\theta$ represents the equation parameters, and $x(t)$ is the solution trajectory.
+
+Our goal is to learn an approximation $\mathcal{G}_\theta$ using a Fourier Neural Operator that generalizes across different history functions $\phi$ and parameter values $\theta$, handles various delay structures including single, multiple, and distributed delays, and exhibits reasonable out-of-distribution behavior when tested on unseen delay values or history function classes.
+
+\subsection{Contributions}
+
+This report documents our initial experimental investigation with several contributions. We establish a benchmark suite of five DDE families with varying complexity, ranging from simple single-delay equations to challenging two-delay systems and distributed delay formulations. We develop a robust data generation pipeline with comprehensive quality control to ensure high-fidelity ground truth labels. We conduct systematic evaluation across four out-of-distribution splits probing delay extrapolation, history distribution shift, and temporal extrapolation. We analyze scaling behavior and capacity limitations, finding that the system is data-limited rather than capacity-limited. Finally, we identify key challenges for future work, particularly regarding OOD generalization.
+
+%==============================================================================
+\section{DDE Benchmark Families}
+%==============================================================================
+
+We design five DDE families spanning different structural characteristics to provide a comprehensive benchmark. Each family is parameterized to allow diversity in behavior while maintaining well-posedness.
+
+\subsection{Family 1: Hutchinson Equation (Delayed Logistic)}
+
+The Hutchinson equation models population dynamics with delayed density-dependent feedback:
+\begin{equation}
+    x'(t) = r \cdot x(t) \cdot \left(1 - \frac{x(t-\tau)}{K}\right)
+\end{equation}
+
+\textbf{Parameters:}
+\begin{itemize}[leftmargin=*]
+    \item Growth rate: $r \in [0.5, 3.0]$
+    \item Carrying capacity: $K \in [0.5, 2.0]$
+    \item Delay: $\tau \in [0.1, 2.0]$
+\end{itemize}
+
+\textbf{Characteristics:} Single discrete delay, 1D state, requires $x > 0$. Exhibits oscillatory behavior when $r\tau > \pi/2$, making it a good test of the model's ability to capture delay-induced instabilities.
+
+\subsection{Family 2: Linear Two-Delay DDE}
+
+A scalar linear DDE with two interacting discrete delays:
+\begin{equation}
+    x'(t) = a \cdot x(t) + b_1 \cdot x(t-\tau_1) + b_2 \cdot x(t-\tau_2)
+\end{equation}
+
+\textbf{Parameters:}
+\begin{itemize}[leftmargin=*]
+    \item Damping: $a \in [-2.0, -0.1]$ (always stabilizing)
+    \item Feedback coefficients: $b_1, b_2 \in [-1.5, 1.5]$ (70\% biased negative)
+    \item Delays: $\tau_1, \tau_2 \in [0.1, 2.0]$ with $|\tau_1 - \tau_2| \geq 0.2$
+\end{itemize}
+
+\textbf{Characteristics:} Two discrete delays with complex interference patterns. Despite being linear, this family proves to be the most challenging due to the interaction between two delay terms operating on different timescales.
+
+\subsection{Family 3: Van der Pol with Delayed Feedback}
+
+A nonlinear oscillator with delayed position feedback:
+\begin{align}
+    x'(t) &= v(t) \\
+    v'(t) &= \mu(1 - x^2)v - x + \kappa \cdot x(t-\tau)
+\end{align}
+
+\textbf{Parameters:}
+\begin{itemize}[leftmargin=*]
+    \item Nonlinearity strength: $\mu \in [0.5, 3.0]$
+    \item Feedback gain: $\kappa \in [-2.0, 2.0]$
+    \item Delay: $\tau \in [0.1, 2.0]$
+\end{itemize}
+
+\textbf{Characteristics:} 2D state space, nonlinear dynamics, limit cycle behavior. History sampling ensures $v = dx/dt$ consistency. Tests the model's ability to handle oscillatory, multi-dimensional systems.
+
+\subsection{Family 4: Distributed Delay -- Uniform Kernel}
+
+A logistic-type equation with uniform distributed delay (moving average):
+\begin{align}
+    x'(t) &= r \cdot x(t) \cdot \left(1 - \frac{m(t)}{K}\right) \\
+    m(t) &= \frac{1}{\tau} \int_{t-\tau}^{t} x(s)\, ds
+\end{align}
+
+The distributed delay is converted to an auxiliary ODE form:
+\begin{equation}
+    m'(t) = \frac{x(t) - x(t-\tau)}{\tau}
+\end{equation}
+
+\textbf{Parameters:}
+\begin{itemize}[leftmargin=*]
+    \item Growth rate: $r \in [1.0, 6.0]$ (increased for diversity)
+    \item Carrying capacity: $K \in [0.5, 2.0]$
+    \item Window size: $\tau \in [0.5, 2.0]$
+\end{itemize}
+
+\textbf{Characteristics:} 2D state $(x, m)$, distributed delay via auxiliary variable. The uniform kernel provides temporal smoothing of the feedback signal.
+
+\subsection{Family 5: Distributed Delay -- Exponential Kernel}
+
+A logistic equation with finite-window exponential kernel:
+\begin{align}
+    x'(t) &= r \cdot x(t) \cdot \left(1 - \frac{g \cdot z(t)}{K}\right) \\
+    z(t) &= \frac{1}{C} \int_{t-\tau}^{t} e^{-\lambda(t-s)} x(s)\, ds
+\end{align}
+where $C = (1 - e^{-\lambda\tau})/\lambda$ is the normalization constant.
+
+Auxiliary ODE form with one discrete lag:
+\begin{equation}
+    z'(t) = -\lambda z(t) + \frac{x(t) - e^{-\lambda\tau} x(t-\tau)}{C}
+\end{equation}
+
+\textbf{Parameters:}
+\begin{itemize}[leftmargin=*]
+    \item Growth rate: $r \in [3.0, 10.0]$
+    \item Carrying capacity: $K \in [0.5, 2.0]$
+    \item Memory decay: $\lambda \in [0.3, 4.0]$
+    \item Window size: $\tau \in [0.3, 2.0]$
+    \item Coupling gain: $g \in [1.0, 2.0]$
+\end{itemize}
+
+\textbf{Critical constraint:} We enforce $\theta = \lambda\tau \in [0.5, 1.8]$ to ensure the delay term $e^{-\lambda\tau} x(t-\tau)$ remains significant. Without this constraint, large $\theta$ values make $e^{-\theta} \approx 0$, reducing the system to an effective ODE.
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of DDE Benchmark Families}
+\label{tab:families}
+\begin{tabular}{lccccl}
+\toprule
+Family & Dim & \#Delays & Type & Positive & Key Challenge \\
+\midrule
+Hutchinson & 1 & 1 & Discrete & Yes & Delay-induced oscillations \\
+Linear2 & 1 & 2 & Discrete & No & Two-delay interference \\
+Van der Pol & 2 & 1 & Discrete & No & Nonlinear oscillations \\
+DistUniform & 2 & 1 & Distributed & Yes & Moving average feedback \\
+DistExp & 2 & 1 & Distributed & Yes & Exponential memory decay \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{hutch_hutch_with_regions.pdf}
+\caption{FNO predictions vs ground truth for the Hutchinson family. The plot shows best, random, and worst samples by relative $L^2$ error. The shaded region indicates the unsupervised history ($t < 0$), while the unshaded region shows the supervised future ($t \geq 0$) where loss is computed.}
+\label{fig:pred_hutch}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{linear2_linear2_with_regions.pdf}
+\caption{FNO predictions vs ground truth for the Linear2 family. Despite being a linear system, this family proves most challenging due to two-delay interference patterns creating complex dynamics.}
+\label{fig:pred_linear2}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{vdp_vdp_with_regions.pdf}
+\caption{FNO predictions vs ground truth for the Van der Pol family. The 2D oscillatory dynamics with limit cycle behavior present a moderate challenge for the FNO architecture.}
+\label{fig:pred_vdp}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_uniform_dist_uniform_with_regions.pdf}
+\caption{FNO predictions vs ground truth for the DistUniform family. The distributed delay via uniform kernel provides temporal smoothing of the feedback signal.}
+\label{fig:pred_dist_uniform}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_exp_dist_exp_with_regions.pdf}
+\caption{FNO predictions vs ground truth for the DistExp family. With the corrected $\theta = \lambda\tau$ constraint ensuring meaningful delay influence, this family achieves the lowest prediction errors.}
+\label{fig:pred_dist_exp}
+\end{figure}
+
+%==============================================================================
+\section{Data Generation Pipeline}
+%==============================================================================
+
+\subsection{Dataset Format and Sharding}
+
+We employ a sharded storage format using NumPy \texttt{.npz} archives. This design provides several important capabilities: generation can be interrupted and resumed at any point, multiple workers can write to different shards in parallel, there is no need to load the entire dataset into RAM, and each shard records its generation seed for full reproducibility.
+
+Each shard contains:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{t\_hist}: $(N_{\text{hist}},)$ -- history time grid on $[-\tau_{\max}, 0)$
+    \item \texttt{t\_out}: $(N_{\text{out}},)$ -- output time grid on $[0, T]$
+    \item \texttt{phi}: $(B, N_{\text{hist}}, d)$ -- history function values
+    \item \texttt{y}: $(B, N_{\text{out}}, d)$ -- solution trajectories
+    \item \texttt{params}: $(B, P)$ -- equation parameters
+    \item \texttt{lags}: $(B, L)$ -- delay values
+    \item \texttt{meta\_json}: solver settings, seed, timestamp
+\end{itemize}
+
+A \texttt{manifest.json} file tracks all shards, recording per-shard seeds and sample counts, a configuration snapshot covering solver settings, grid parameters, and family specification, content hashes for integrity verification, and normalization statistics computed exclusively on the training split.
+
+\subsection{History Function Sampling}
+
+History functions are sampled as random Fourier series:
+\begin{equation}
+    \phi(t) = c_0 + \sum_{k=1}^{K} \frac{a_k}{k} \cos\left(\frac{2\pi k t}{L}\right) + \frac{b_k}{k} \sin\left(\frac{2\pi k t}{L}\right)
+\end{equation}
+where $c_0, a_k, b_k \sim \text{Uniform}(-1, 1)$ and $K=5$ modes. The $1/k$ decay ensures smoothness.
+
+Several special cases require modification of this base sampling procedure. For positive families (Hutchinson, DistUniform, DistExp), we apply an absolute value and offset transformation $\phi(t) = |\phi(t)| + 0.1$ to ensure positivity. For the Van der Pol family, we generate consistent $(x, v)$ histories where the velocity $v = dx/dt$ is computed analytically from the position history. For the OOD-history split, we use cubic spline histories instead of Fourier series, maintaining the same smoothness level but using a fundamentally different function basis.
+
+\subsection{Numerical Solver}
+
+We use a Python-based method-of-steps solver with \texttt{scipy.integrate.solve\_ivp}. The solver is configured with relative tolerance $10^{-6}$, absolute tolerance $10^{-9}$, and maximum step size $\Delta t/2 = 0.025$. To handle the derivative discontinuities inherent to DDEs, we specify \texttt{tstops} at multiples of the delay $\tau$, ensuring the integrator does not step across these points.
+
+If the default RK45 solver fails to converge, we employ a fallback ladder that progressively tries more robust methods: first DOP853 (higher order explicit), then Radau (implicit, stiff-capable), and finally LSODA (adaptive stiff/non-stiff switching). This fallback mechanism ensures robust generation even for challenging parameter combinations.
+
+\subsection{Quality Control Rules}
+
+Each generated sample undergoes rigorous quality checks before inclusion in the dataset. We verify that all values remain finite with $\max|y| < 10^6$ to reject numerical blowups, enforce family-specific amplitude bounds such as positivity for the Hutchinson family, check continuity at the history-future boundary requiring $|y(0^+) - \phi(0^-)| < 0.01$, and reject any sample where the solver reports convergence failure. Rejection rates vary by family, with Linear2 exhibiting the highest rate at approximately 5\% due to potential instabilities arising from positive feedback coefficients.
+
+%==============================================================================
+\section{Dataset Splits and OOD Design}
+%==============================================================================
+
+\subsection{In-Distribution (ID) Splits}
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset Split Sizes}
+\label{tab:splits}
+\begin{tabular}{lrr}
+\toprule
+Split & Samples & Purpose \\
+\midrule
+Train & 50,000 & Model training \\
+Validation & 2,000 & Early stopping, hyperparameter selection \\
+Test (ID) & 2,000 & In-distribution evaluation \\
+Test (OOD) & 2,000 each & Out-of-distribution evaluation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Out-of-Distribution Splits}
+
+We design four OOD splits to probe different generalization axes:
+
+\subsubsection{OOD-Delay: Delay Extrapolation}
+
+\textbf{Definition:} Train on $\tau \in [0.1, 1.3]$, test on $\tau \in (1.3, 2.0]$.
+
+For two-delay families (Linear2), we use $\max(\tau_1, \tau_2) > 1.3$.
+
+\textbf{Motivation:} Tests whether the model learns delay-invariant representations or memorizes delay-specific patterns.
+
+\subsubsection{OOD-Delay-Hole: Interpolation Gap}
+
+\textbf{Definition:} Exclude $\tau \in [0.9, 1.1]$ from training, test on that band.
+
+\textbf{Motivation:} Tests interpolation ability within the training range.
+
+\subsubsection{OOD-History: Distribution Shift}
+
+\textbf{Definition:} Train with Fourier histories, test with cubic spline histories (same smoothness level, different function class).
+
+\textbf{Motivation:} Tests whether the model generalizes to unseen history distributions while keeping delay parameters in-distribution.
+
+\subsubsection{OOD-Horizon: Temporal Extrapolation}
+
+\textbf{Definition:} Train on $T=20$, test on $T=40$.
+
+\textbf{Motivation:} Tests long-horizon stability and autoregressive error accumulation.
+
+\subsection{Split Audit and Leakage Prevention}
+
+We verify split integrity through multiple mechanisms. Parameter distribution checks confirm that $\tau$ ranges are respected for each split. History basis verification through coefficient analysis ensures proper separation between Fourier and spline histories. Test set consistency is maintained by using identical seeds across all scaling experiments. Finally, hash-based deduplication guarantees that no sample appears in multiple splits.
+
+%==============================================================================
+\section{Model Architecture and Training}
+%==============================================================================
+
+\subsection{FNO Architecture}
+
+We employ a 1D Fourier Neural Operator with residual connections (FNO1dResidual):
+
+\begin{table}[htbp]
+\centering
+\caption{Model Architecture (Small FNO, 93k parameters)}
+\label{tab:model}
+\begin{tabular}{ll}
+\toprule
+Hyperparameter & Value \\
+\midrule
+Fourier modes & 12 \\
+Hidden width & 48 \\
+Number of layers & 3 \\
+Activation & GELU \\
+Dropout & 0.1 \\
+Residual connections & Yes \\
+Layer normalization & Yes (per block) \\
+\midrule
+Total parameters & 93,122 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Input Encoding}
+
+The input is constructed on a combined grid $t \in [-\tau_{\max}, T]$:
+
+\begin{table}[htbp]
+\centering
+\caption{Input Channel Structure}
+\label{tab:input}
+\begin{tabular}{cl}
+\toprule
+Channels & Description \\
+\midrule
+$0, \ldots, d-1$ & History signal: $\phi(t)$ for $t \leq 0$, else 0 \\
+$d$ & Mask: 1 for $t \leq 0$, else 0 \\
+$d+1$ & Normalized time coordinate \\
+$d+2, \ldots, d+1+P$ & Parameters (broadcast constant) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Output and Loss Masking}
+
+The model outputs the full trajectory on $[-\tau_{\max}, T]$, but loss is computed \textbf{only on the future region} $t > 0$:
+\begin{equation}
+    \mathcal{L} = \frac{1}{|T^+|} \sum_{t \in [0, T]} \norm{\hat{y}(t) - y(t)}^2
+\end{equation}
+
+\textbf{Rationale:} The history region is provided as input, not predicted. Supervising the history would be trivial (copy input) and would not reflect the model's ability to solve the DDE.
+
+\subsection{Training Configuration}
+
+\begin{table}[htbp]
+\centering
+\caption{Training Hyperparameters}
+\label{tab:training}
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Optimizer & AdamW \\
+Learning rate & 0.001 \\
+Weight decay & 0.001 \\
+Batch size & 32 \\
+Max epochs & 150 \\
+Early stopping patience & 15 epochs \\
+LR scheduler & ReduceLROnPlateau \\
+Scheduler patience & 5 epochs \\
+Scheduler factor & 0.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Normalization Policy}
+
+A critical design choice in our pipeline is that all normalization statistics are computed from the ID training split only and applied consistently to training, validation, ID test evaluation, and crucially, all OOD evaluation without recomputation. This prevents information leakage and ensures that OOD metrics reflect true generalization capability rather than artificially benefiting from test-time statistics.
+
+\subsection{Evaluation Metrics}
+
+\textbf{Primary metric:} Relative $L^2$ error in original (denormalized) space:
+\begin{equation}
+    \relL = \frac{\norm{\hat{y} - y}_2}{\norm{y}_2}
+\end{equation}
+computed only on the future region $t \in [0, T]$.
+
+\textbf{Reported statistics:} Median, P90, P95, Mean $\pm$ Std over the test set.
+
+%==============================================================================
+\section{Baseline Results}
+%==============================================================================
+
+\subsection{ID Test Performance Across Families}
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline FNO Performance on ID Test (N=2000 samples)}
+\label{tab:baseline}
+\begin{tabular}{lcccl}
+\toprule
+Family & Median & P90 & P95 & Difficulty \\
+\midrule
+DistExp (v2) & \textbf{0.022} & 0.074 & 0.126 & Easiest \\
+Hutchinson & 0.049 & 0.140 & 0.190 & Easy \\
+DistUniform & 0.086 & 0.334 & 0.441 & Medium \\
+Van der Pol & 0.297 & 0.703 & 0.888 & Hard \\
+Linear2 & 0.580 & 1.150 & 1.680 & Hardest \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Several key observations emerge from these results. The DistExp family proves easiest with a median error of just 2.2\%, where the smooth exponential memory kernel appears to provide natural regularization. Surprisingly, Linear2 is the hardest family at 58\% median error despite being a linear system; the two-delay interference creates complex patterns that the FNO struggles to capture. Notably, state dimension is not the primary difficulty factor, as the 2D families (Van der Pol and DistUniform) span the entire difficulty spectrum. Finally, P95 errors are consistently 2--4$\times$ the median values, indicating a non-trivial tail of failure cases that warrants further investigation.
+
+\subsection{Error vs Time Analysis}
+
+Error accumulation over time reveals important dynamics about model behavior. Near $t=0$, we observe an initial transient with higher error due to the history-future boundary discontinuity where the model must transition from copying input to genuine prediction. Errors typically stabilize after approximately $t \approx 2\tau$, entering a steady-state regime where the model has ``settled'' into its prediction mode. However, some families, particularly Linear2 and Van der Pol, exhibit late-time drift with increasing error toward the end of the prediction horizon, suggesting gradual accumulation of prediction errors. The P95 tail error curves are particularly informative, revealing which samples fail catastrophically---often those with parameter combinations leading to near-unstable dynamics where small prediction errors compound rapidly.
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{hutch_error_vs_time_all_splits.pdf}
+\caption{Error vs time for the Hutchinson family across ID and OOD splits. Each curve shows median relative $L^2$ error at each time step. The OOD-delay split shows dramatic degradation, with errors increasing by 6.7$\times$ compared to the ID test.}
+\label{fig:error_hutch}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{linear2_error_vs_time_all_splits.pdf}
+\caption{Error vs time for the Linear2 family. Despite being linear, this family shows the highest absolute errors. The two-delay interference creates patterns that are difficult for the FNO to capture accurately.}
+\label{fig:error_linear2}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{vdp_error_vs_time_all_splits.pdf}
+\caption{Error vs time for the Van der Pol family. The oscillatory dynamics show moderate OOD degradation, with OOD-history and OOD-horizon splits both causing approximately 4$\times$ increase in error.}
+\label{fig:error_vdp}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_uniform_error_vs_time_all_splits.pdf}
+\caption{Error vs time for the DistUniform family. This family shows the most severe OOD-history degradation at 7$\times$, suggesting the model partially memorizes the Fourier history structure.}
+\label{fig:error_dist_uniform}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_exp_error_vs_time_all_splits.pdf}
+\caption{Error vs time for the DistExp family. With the corrected $\theta$ constraint, this family shows excellent generalization with minimal OOD degradation across all splits.}
+\label{fig:error_dist_exp}
+\end{figure}
+
+\subsection{OOD Generalization Summary}
+
+\begin{table}[htbp]
+\centering
+\caption{OOD Gap Ratios (OOD Median / ID Median)}
+\label{tab:ood}
+\begin{tabular}{lcccc}
+\toprule
+Family & OOD-Delay & OOD-History & OOD-Horizon & OOD-Hole \\
+\midrule
+Hutchinson & \textbf{6.7$\times$} & -- & -- & -- \\
+Linear2 & 1.5$\times$ & -- & -- & -- \\
+Van der Pol & 1.1$\times$ & 4.4$\times$ & 4.2$\times$ & 1.0$\times$ \\
+DistUniform & 1.8$\times$ & \textbf{7.0$\times$} & 2.5$\times$ & 0.7$\times$ \\
+DistExp (v2) & 1.2$\times$ & 1.4$\times$ & 0.8$\times$ & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key findings:}
+
+\subsubsection{OOD-Delay: Catastrophic for Hutchinson}
+The Hutchinson family shows a 6.7$\times$ degradation when extrapolating to larger delays. This suggests the FNO learns delay-specific patterns rather than delay-invariant solution operators. The dynamics fundamentally change character (oscillatory vs monotonic) across the delay range.
+
+\subsubsection{OOD-History: Severe for Distributed Delays}
+DistUniform shows 7$\times$ degradation when history distribution shifts from Fourier to spline basis. This indicates the model partially memorizes history function structure rather than learning the underlying operator.
+
+\subsubsection{OOD-Horizon: Moderate Degradation}
+Extending from $T=20$ to $T=40$ causes 2-4$\times$ degradation for oscillatory families (VdP, DistUniform). Errors accumulate but don't explode -- the model maintains qualitative behavior.
+
+\subsubsection{OOD-Hole: Interpolation Works}
+The delay-hole split (interpolating within training range) shows $\sim$1$\times$ gap, confirming the model can interpolate but not extrapolate in delay space.
+
+%==============================================================================
+\section{Scaling Behavior Analysis}
+%==============================================================================
+
+\subsection{Data Scaling Curves}
+
+We study how performance scales with training set size $N \in \{512, 1024, 5120, 10240\}$:
+
+\begin{table}[htbp]
+\centering
+\caption{Data Scaling Results (Median relL2)}
+\label{tab:scaling}
+\begin{tabular}{lcccc}
+\toprule
+Family & N=512 & N=1024 & N=5120 & N=10240 \\
+\midrule
+Hutchinson & 0.43 & 0.44 & 0.22 & \textbf{0.19} \\
+Linear2 & 1.51 & 1.21 & 0.70 & \textbf{0.63} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The scaling results reveal several important patterns. Both families show substantial improvement of 55--60\% when scaling from $N=512$ to $N=10240$ samples, demonstrating clear data efficiency gains. Crucially, we observe no plateau at 10k samples, suggesting that further scaling would likely yield additional improvements. The apparent non-monotonicity between 512 and 1024 samples is explained by seed variance of approximately 0.01, making these two points statistically equivalent. Across all dataset sizes, Linear2 remains approximately 3$\times$ harder than Hutchinson, indicating that the relative difficulty is intrinsic to the family rather than a data scarcity artifact. Notably, P95 errors improve more dramatically than median errors, with a 69\% drop for Linear2, suggesting that additional data particularly helps eliminate catastrophic failure cases in the tail of the error distribution.
+
+\subsection{Capacity vs Data Limitation}
+
+We tested larger models with up to 400k parameters to determine whether capacity was limiting performance. These experiments showed no improvement over the Small FNO (93k parameters), and in fact exhibited slight degradation for the largest models due to overfitting. This conclusively demonstrates that our current setup is data-limited rather than capacity-limited.
+
+Based on these findings, future improvements should focus on three main directions: scaling training data beyond the current 50k samples, developing better inductive biases through delay-aware architectures that explicitly encode the temporal structure of DDEs, and investigating improved techniques for OOD generalization.
+
+%==============================================================================
+\section{Dataset Quality Benchmarks}
+%==============================================================================
+
+\subsection{Label Fidelity}
+
+To verify solver accuracy, we compare our method-of-steps solutions against high-precision reference solutions computed with tighter tolerances and smaller step sizes. The fidelity metric is the relative $L^2$ error between the fast solver output and the reference solution. We establish pass criteria requiring median fidelity below $10^{-3}$ and P95 fidelity below $10^{-2}$. All families pass these criteria with median fidelity below $10^{-4}$, confirming that the ground truth labels are sufficiently accurate for training neural operators.
+
+\subsection{Delay Sensitivity Verification}
+
+For distributed delay families, we verify the delay term is not negligible:
+
+The DistExp family required a critical fix to serve as a valid delay benchmark. The original parameter ranges allowed $\theta = \lambda\tau$ to reach values up to 12, which made $e^{-\theta} \approx 0$ and rendered the delay term effectively irrelevant. After constraining $\theta \in [0.5, 1.8]$, we observed delay sensitivity increase from 1.87\% to 11.8\%, and the $e^{-\theta}$ median increased from 3.45\% to 32.7\%. This fix ensures that DistExp functions as a true delay benchmark rather than an effective ODE masquerading as a DDE.
+
+\subsection{Diversity Metrics}
+
+We verify trajectory diversity through multiple complementary metrics: the distribution of maximum amplitudes $\max|x|$, oscillation counts measured by zero-crossings, and dominant frequencies identified through FFT peak analysis. These metrics confirm that all families exhibit appropriate diversity in their generated trajectories, avoiding the extremes of being ``too easy'' (trajectories remaining near equilibrium) or ``too hard'' (trajectories consistently blowing up to numerical limits).
+
+%==============================================================================
+\section{Training Curves and Convergence}
+%==============================================================================
+
+\subsection{Loss Dynamics}
+
+Training curves across all families exhibit consistent patterns that provide insight into the learning dynamics. During the first 10--20 epochs, we observe a fast initial drop as the model captures coarse dynamics of the solution operator. This is followed by a period of gradual refinement from epochs 20--100, during which the model improves prediction of fine details and reduces error on challenging samples. Early stopping typically identifies the best models around epoch 80--120, and importantly, we observe no significant overfitting as validation loss tracks training loss closely throughout.
+
+\subsection{Generalization Gap}
+
+The generalization gap, measured as the difference between validation and training loss, remains near zero or slightly negative for most families throughout training. This indicates that the model is not overfitting with the current capacity, which is consistent with our earlier finding that the system operates in a data-limited rather than capacity-limited regime.
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{hutch_training_curves.pdf}
+\caption{Training curves for the Hutchinson family showing training/validation loss, validation relative $L^2$ error, and generalization gap. The model converges smoothly with minimal overfitting.}
+\label{fig:train_hutch}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{linear2_training_curves.pdf}
+\caption{Training curves for the Linear2 family. Despite being the hardest family, training proceeds stably with the generalization gap remaining near zero throughout.}
+\label{fig:train_linear2}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{vdp_training_curves.pdf}
+\caption{Training curves for the Van der Pol family. The oscillatory dynamics require more epochs to converge, but the model ultimately achieves stable performance.}
+\label{fig:train_vdp}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_uniform_training_curves.pdf}
+\caption{Training curves for the DistUniform family. The distributed delay structure is learned efficiently with rapid initial convergence.}
+\label{fig:train_dist_uniform}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.95\textwidth]{dist_exp_training_curves.pdf}
+\caption{Training curves for the DistExp family. With the corrected $\theta$ constraint, training converges quickly to achieve the lowest error among all families.}
+\label{fig:train_dist_exp}
+\end{figure}
+
+%==============================================================================
+\section{Discussion and Future Directions}
+%==============================================================================
+
+\subsection{Summary of Findings}
+
+Our experiments demonstrate that Fourier Neural Operators can successfully learn DDE solution operators, achieving median relative $L^2$ errors of 2--6\% on the easier families. However, the results also reveal that two-delay interference presents the greatest challenge: Linear2 exhibits 58\% median error despite being a linear system, highlighting that linearity does not imply learnability.
+
+Out-of-distribution generalization remains a significant limitation of the current approach. Delay extrapolation causes up to 6.7$\times$ degradation (Hutchinson family), history distribution shift leads to up to 7$\times$ degradation (DistUniform family), and horizon extension results in 2--4$\times$ degradation for oscillatory families. These findings suggest that FNOs do not learn delay-invariant or history-invariant representations.
+
+On a positive note, data scaling provides consistent benefits with 55--60\% improvement when scaling from 512 to 10k samples, and importantly, no plateau is observed at 10k samples. Our capacity experiments confirm that model size is not the bottleneck---larger models provide no improvement, indicating that future gains should come from more data and better inductive biases rather than increased model capacity.
+
+\subsection{Limitations}
+
+This study has several limitations that should inform interpretation of the results and guide future work. We evaluate only a single architecture (FNO), and other neural operators such as DeepONet or attention-based architectures may achieve different performance characteristics. Our use of fixed grid resolution may disadvantage the model near discontinuities at delay multiples, where adaptive grids could potentially improve accuracy. The experiments are limited to moderate delays ($\tau \leq 2$) and prediction horizons ($T \leq 20$), leaving open questions about scaling to longer timescales. Finally, we do not incorporate physics-informed loss terms that penalize violations of the DDE, which could provide additional regularization and improve generalization.
+
+\subsection{Future Directions}
+
+Several promising directions emerge from this work. Delay-aware architectures that explicitly encode the delay structure could provide inductive biases that improve both ID performance and OOD generalization. Multi-scale representations that handle different delay timescales within a single model would enable application to more complex systems. Physics-informed training that penalizes DDE residual violations could improve accuracy and provide guarantees on solution quality. Autoregressive rollout strategies could extend predictions beyond the training horizon while controlling error accumulation. Expanding the benchmark to include state-dependent delays and neutral DDEs would test generalization to more challenging equation classes. Finally, scaling datasets to 100k+ samples should yield further improvements given the absence of a plateau in our scaling experiments.
+
+%==============================================================================
+\section{Conclusion}
+%==============================================================================
+
+This report establishes a systematic benchmark for neural operator learning on delay differential equations. Our experiments with Fourier Neural Operators reveal that while reasonable in-distribution performance is achievable, significant challenges remain in out-of-distribution generalization -- particularly for delay extrapolation and history distribution shift.
+
+The finding that FNOs do not learn delay-invariant representations suggests that architectural innovations specifically designed for functional differential equations may be necessary. The data-limited (rather than capacity-limited) regime indicates that larger, more diverse datasets combined with improved inductive biases represent the most promising path forward.
+
+This work provides the experimental foundation, evaluation methodology, and baseline results for future research on learning solution operators for functional differential equations.
+
+%==============================================================================
+% Appendix
+%==============================================================================
+\appendix
+
+\section{Grid and Time Discretization}
+\label{app:grid}
+
+\begin{table}[htbp]
+\centering
+\caption{Discretization Parameters}
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Maximum delay $\tau_{\max}$ & 2.0 \\
+Training horizon $T$ & 20.0 \\
+OOD-horizon $T$ & 40.0 \\
+Time step $\Delta t$ & 0.05 \\
+History grid points & 256 \\
+Output grid points & 401 \\
+Total input length & 657 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Full OOD Results}
+\label{app:ood}
+
+This appendix provides complete out-of-distribution evaluation results for all five DDE families across all tested OOD splits.
+
+\subsection{OOD-Delay: Delay Extrapolation}
+
+Models are trained on $\tau \in [0.1, 1.3]$ and tested on $\tau \in (1.3, 2.0]$. For Linear2, the condition is $\max(\tau_1, \tau_2) > 1.3$.
+
+\begin{table}[htbp]
+\centering
+\caption{OOD-Delay Results (Median Relative $L^2$ Error)}
+\label{tab:ood_delay_full}
+\begin{tabular}{lcccl}
+\toprule
+Family & ID Test & OOD-Delay & Gap & Interpretation \\
+\midrule
+Hutchinson & 0.049 & 0.330 & \textbf{6.7$\times$} & Catastrophic failure \\
+Linear2 & 0.580 & 0.850 & 1.5$\times$ & Moderate degradation \\
+Van der Pol & 0.297 & 0.330 & 1.1$\times$ & Minimal degradation \\
+DistUniform & 0.086 & 0.157 & 1.8$\times$ & Moderate degradation \\
+DistExp (v2) & 0.022 & 0.025 & 1.2$\times$ & Excellent generalization \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Hutchinson family shows catastrophic failure on OOD-delay, with errors increasing nearly 7-fold. This suggests the FNO learns delay-specific dynamics rather than delay-invariant representations. The delay parameter fundamentally changes the character of Hutchinson solutions (oscillatory vs.\ monotonic behavior depending on whether $r\tau > \pi/2$), making extrapolation particularly challenging.
+
+\subsection{OOD-Delay-Hole: Interpolation Within Training Range}
+
+Models are trained excluding $\tau \in [0.9, 1.1]$ and tested on that held-out band. This tests interpolation rather than extrapolation.
+
+\begin{table}[htbp]
+\centering
+\caption{OOD-Delay-Hole Results (Median Relative $L^2$ Error)}
+\label{tab:ood_hole_full}
+\begin{tabular}{lcccl}
+\toprule
+Family & ID Test & OOD-Hole & Gap & Interpretation \\
+\midrule
+Van der Pol & 0.297 & 0.299 & 1.0$\times$ & Perfect interpolation \\
+DistUniform & 0.086 & 0.064 & 0.7$\times$ & Better than ID (easier region) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both tested families show excellent interpolation ability, confirming that the FNO can generalize within the training delay range but struggles with extrapolation beyond it.
+
+\subsection{OOD-History: History Function Distribution Shift}
+
+Models are trained with Fourier series histories and tested with cubic spline histories (same smoothness, different function class).
+
+\begin{table}[htbp]
+\centering
+\caption{OOD-History Results (Median Relative $L^2$ Error)}
+\label{tab:ood_history_full}
+\begin{tabular}{lcccl}
+\toprule
+Family & ID Test & OOD-History & Gap & Interpretation \\
+\midrule
+Van der Pol & 0.297 & 1.297 & 4.4$\times$ & Significant degradation \\
+DistUniform & 0.086 & 0.603 & \textbf{7.0$\times$} & Severe degradation \\
+DistExp (v2) & 0.022 & 0.031 & 1.4$\times$ & Good generalization \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DistUniform shows the most severe history shift degradation at 7$\times$, suggesting the model partially memorizes the Fourier structure of training histories rather than learning a history-agnostic solution operator. The distributed delay integration over the history region may make this family particularly sensitive to the functional form of the history.
+
+\subsection{OOD-Horizon: Temporal Extrapolation}
+
+Models are trained on $T=20$ and tested on $T=40$ (2$\times$ longer prediction horizon).
+
+\begin{table}[htbp]
+\centering
+\caption{OOD-Horizon Results (Median Relative $L^2$ Error)}
+\label{tab:ood_horizon_full}
+\begin{tabular}{lcccl}
+\toprule
+Family & ID Test & OOD-Horizon & Gap & Interpretation \\
+\midrule
+Van der Pol & 0.297 & 1.238 & 4.2$\times$ & Significant degradation \\
+DistUniform & 0.086 & 0.217 & 2.5$\times$ & Moderate degradation \\
+DistExp (v2) & 0.022 & 0.018 & 0.8$\times$ & Improved (longer averaging) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Interestingly, DistExp shows \textit{improved} performance on longer horizons, likely because the exponential memory kernel provides natural smoothing that benefits from longer temporal context. Van der Pol shows the largest degradation, consistent with error accumulation in oscillatory dynamics.
+
+\subsection{Consolidated OOD Gap Summary}
+
+\begin{table}[htbp]
+\centering
+\caption{All OOD Gaps (Ratio of OOD Median to ID Median)}
+\label{tab:ood_all_gaps}
+\begin{tabular}{lcccc}
+\toprule
+Family & OOD-Delay & OOD-Hole & OOD-History & OOD-Horizon \\
+\midrule
+Hutchinson & \textbf{6.7$\times$} & -- & -- & -- \\
+Linear2 & 1.5$\times$ & -- & -- & -- \\
+Van der Pol & 1.1$\times$ & 1.0$\times$ & 4.4$\times$ & 4.2$\times$ \\
+DistUniform & 1.8$\times$ & 0.7$\times$ & \textbf{7.0$\times$} & 2.5$\times$ \\
+DistExp (v2) & 1.2$\times$ & -- & 1.4$\times$ & 0.8$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key patterns emerge from this consolidated view. OOD-delay is catastrophic only for Hutchinson (6.7$\times$), where delay fundamentally changes solution character. OOD-history causes the largest degradation for DistUniform (7.0$\times$), suggesting distributed delay families are sensitive to history function class. OOD-horizon shows moderate degradation for oscillatory families but can actually improve performance for families with smoothing kernels. The OOD-hole split confirms interpolation works well ($\sim$1$\times$) even when extrapolation fails.
+
+\subsection{DistExp Fix Verification}
+
+The original DistExp parameters allowed $\theta = \lambda\tau$ to reach values up to 12, making $e^{-\theta} \approx 0$ and rendering the delay term negligible. This produced artificially low OOD gaps (0.96$\times$ for OOD-delay) because the equation behaved as an ODE regardless of delay value.
+
+\begin{table}[htbp]
+\centering
+\caption{DistExp Before/After Fix Comparison}
+\label{tab:dist_exp_fix}
+\begin{tabular}{lcc}
+\toprule
+Metric & Before Fix (v1) & After Fix (v2) \\
+\midrule
+$\theta$ range & $[0.1, 12.0]$ & $[0.5, 1.8]$ \\
+\% in ODE-ish regime ($\theta > 3$) & 55.7\% & 0\% \\
+Delay sensitivity & 1.87\% & \textbf{11.8\%} \\
+$e^{-\theta}$ median & 3.45\% & \textbf{32.7\%} \\
+\midrule
+ID median error & 0.019 & 0.022 \\
+OOD-delay gap & 0.96$\times$ (invalid) & \textbf{1.17$\times$} (valid) \\
+OOD-history gap & -- & 1.44$\times$ \\
+OOD-horizon gap & -- & 0.83$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+After the fix, DistExp v2 shows realistic OOD gaps while maintaining excellent ID performance, confirming it now serves as a valid distributed delay benchmark.
+
+\section{Reproducibility}
+\label{app:repro}
+
+All experiments are reproducible via the provided codebase:
+\begin{itemize}[leftmargin=*]
+    \item Configuration files: \texttt{configs/baseline\_protocol.yaml}
+    \item Data manifests: \texttt{data\_*/*/manifest.json}
+    \item Model checkpoints: \texttt{outputs/baseline\_v*/}
+    \item Evaluation scripts: \texttt{scripts/}
+\end{itemize}
+
+Random seeds are fixed at 42 for all baseline experiments.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

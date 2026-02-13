@@ -1,0 +1,98 @@
+% Benchmarks
+
+We propose a benchmark suite of five DDE families that collectively cover discrete delays
+(linear and nonlinear), multi-delay/multidimensional systems, and distributed/integral delays.
+
+\subsection{Family 1: Scalar Linear DDE}
+
+The simplest benchmark is a scalar linear DDE with a single discrete delay:
+\begin{equation}
+  x'(t) = a \, x(t) + b \, x(t-\tau).
+\end{equation}
+
+\paragraph{Why it's useful.}
+This family admits analytical solutions via characteristic equations and can exhibit
+oscillations or instability depending on the parameters. It serves as a sanity check.
+
+\paragraph{Parameter ranges.}
+\begin{itemize}
+  \item $a \sim \mathrm{Unif}[-2, 1]$
+  \item $b \sim \mathrm{Unif}[-2, 2]$
+  \item $\tau \sim \mathrm{Unif}[0.1, 2.0]$
+\end{itemize}
+
+\subsection{Family 2: Hutchinson (Delayed Logistic) Equation}
+
+A classic nonlinear DDE from population dynamics:
+\begin{equation}
+  x'(t) = r \, x(t) \Bigl(1 - \frac{x(t-\tau)}{K}\Bigr).
+\end{equation}
+
+\paragraph{Why it's useful.}
+The delayed feedback can generate sustained oscillations. This is a standard test problem
+in the DDE literature.
+
+\paragraph{Parameter ranges.}
+\begin{itemize}
+  \item $r \sim \mathrm{Unif}[0.5, 3.0]$
+  \item $K \sim \mathrm{Unif}[0.5, 2.0]$
+  \item $\tau \sim \mathrm{Unif}[0.1, 2.0]$
+  \item History: positive-valued
+\end{itemize}
+
+\subsection{Family 3: Mackey--Glass Equation}
+
+A well-known DDE that can exhibit complex dynamics:
+\begin{equation}
+  x'(t) = \beta \frac{x(t-\tau)}{1 + x(t-\tau)^n} - \gamma \, x(t), \quad n = 10.
+\end{equation}
+
+\paragraph{Why it's useful.}
+This is a canonical benchmark for ``delay produces complex dynamics.'' We keep $n$ fixed
+and vary the other parameters.
+
+\paragraph{Parameter ranges.}
+\begin{itemize}
+  \item $\beta \sim \mathrm{Unif}[1, 4]$
+  \item $\gamma \sim \mathrm{Unif}[0.5, 3]$
+  \item $\tau \sim \mathrm{Unif}[0.2, 2.0]$
+  \item $n = 10$ (fixed)
+\end{itemize}
+
+\subsection{Family 4: 2D Predator--Prey with Delays}
+
+A two-dimensional system with two delays:
+\begin{align}
+  x'(t) &= x(t) \bigl(\alpha - \beta \, y(t-\tau_1)\bigr), \\
+  y'(t) &= y(t) \bigl(-\delta + \gamma \, x(t-\tau_2)\bigr).
+\end{align}
+
+\paragraph{Why it's useful.}
+This tests multi-channel state and multi-delay structure while remaining interpretable.
+
+\paragraph{Parameter ranges.}
+\begin{itemize}
+  \item $\alpha, \beta, \gamma, \delta \sim \mathrm{Unif}[0.5, 2.0]$
+  \item $\tau_1, \tau_2 \sim \mathrm{Unif}[0.1, 2.0]$
+\end{itemize}
+
+\subsection{Family 5: Distributed Delay (Moving Average)}
+
+A distributed delay model using a uniform kernel:
+\begin{equation}
+  x'(t) = -\alpha \, x(t) + \beta \, m(t), \quad
+  m(t) = \frac{1}{\tau} \int_{t-\tau}^{t} x(s) \, ds.
+\end{equation}
+
+\paragraph{Auxiliary formulation.}
+By differentiating $m(t)$, we convert this to a system with a discrete delay:
+\begin{equation}
+  m'(t) = \frac{1}{\tau} \bigl( x(t) - x(t-\tau) \bigr).
+\end{equation}
+
+\paragraph{Parameter ranges.}
+\begin{itemize}
+  \item $\alpha \sim \mathrm{Unif}[0.2, 2.0]$
+  \item $\beta \sim \mathrm{Unif}[-2.0, 2.0]$
+  \item $\tau \sim \mathrm{Unif}[0.1, 2.0]$
+\end{itemize}

@@ -1,0 +1,61 @@
+% Experiments
+
+\subsection{Model Architecture}
+
+We use a 1D Fourier Neural Operator with the following configuration:
+\begin{itemize}
+  \item \textbf{Spectral convolution}: 1D over the time dimension
+  \item \textbf{Layers}: 4--6 Fourier layers
+  \item \textbf{Width}: 32--128 channels
+  \item \textbf{Modes}: 8--32 Fourier modes (depending on grid resolution)
+  \item \textbf{Activation}: GELU
+\end{itemize}
+
+\subsection{Training Details}
+
+\paragraph{Loss function.}
+Mean squared error on the future portion of the trajectory:
+\begin{equation}
+  \mathcal{L} = \frac{1}{|\mathcal{T}|} \sum_{t \in [0, T]} |\hat{y}(t) - y(t)|^2,
+\end{equation}
+where $y(t)$ is the solver output and $\hat{y}(t)$ is the model prediction.
+
+\paragraph{Optimizer.}
+Adam with learning rate scheduling.
+
+\paragraph{Data splits.}
+Train/validation/test splits of 80\%/10\%/10\%.
+
+\subsection{Evaluation Metrics}
+
+\paragraph{Relative $L^2$ error.}
+\begin{equation}
+  \text{Rel. } L^2 = \frac{\| \hat{y} - y \|_2}{\| y \|_2}.
+\end{equation}
+
+\paragraph{Error vs.\ time.}
+We report error as a function of time, averaged over the test set, to understand how
+prediction quality degrades over longer horizons.
+
+\subsection{Experiments}
+
+\paragraph{Per-family results.}
+For each of the five DDE families, we report train/validation/test relative $L^2$ errors.
+
+\paragraph{Generalization studies.}
+\begin{itemize}
+  \item \textbf{Longer horizons}: Test on $T' > T$.
+  \item \textbf{Larger delays}: Test on $\tau' > \tau_{\max}$ from training.
+  \item \textbf{Parameter extrapolation}: Mild extrapolation beyond training ranges.
+\end{itemize}
+
+\paragraph{Ablations.}
+\begin{itemize}
+  \item Effect of number of Fourier modes
+  \item Effect of network depth/width
+  \item Effect of training dataset size
+\end{itemize}
+
+\subsection{Results}
+
+% TODO: Add tables and figures with experimental results

@@ -1,0 +1,48 @@
+# Loss Weighting Ablation Configurations
+# Test different temporal weightings for long-horizon performance
+
+description: "Loss weighting ablation study"
+
+# Uniform loss (baseline)
+uniform:
+  type: uniform
+  description: "Uniform loss on [0,T]"
+  weight_fn: "1.0"
+
+# Linear increasing weight (emphasize late time)
+linear_increasing:
+  type: linear
+  start_weight: 0.5
+  end_weight: 1.5
+  description: "Linearly increasing weight (0.5 -> 1.5)"
+  weight_fn: "0.5 + t/T"
+
+# Exponential increasing
+exp_increasing:
+  type: exponential
+  base_weight: 0.5
+  growth_rate: 1.0
+  description: "Exponentially increasing weight"
+  weight_fn: "0.5 * exp(t/T)"
+
+# Two-stage: uniform then late-focus
+two_stage:
+  type: two_stage
+  stage1_epochs: 50
+  stage1_weights: uniform
+  stage2_epochs: 50
+  stage2_weights: late_focus
+  late_focus_start: 0.5  # Focus on t > 0.5*T
+  description: "Two-stage: uniform then late-time focus"
+
+# Window-based (segments)
+segment:
+  type: segment
+  n_segments: 4
+  weights: [0.5, 0.75, 1.0, 1.5]
+  description: "Segment-based weights (4 segments)"
+
+# Expected outcomes:
+# - uniform: good baseline
+# - linear_increasing: may help long-horizon drift
+# - two_stage: often best for long trajectories

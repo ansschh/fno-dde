@@ -1,0 +1,18 @@
+sweep_name: hard_benchmark_v1
+families:
+  dde: [neutral, chaotic_mg, forced_duffing, multi_delay_comb, stiff_vdp, hutch, linear2, vdp, dist_uniform, dist_exp]
+  pde: [burgers, ks, helmholtz, wave]
+data_scales: [2000, 10000, 50000]
+seeds: [42, 123, 456]
+model_configs:
+  small: {modes: 8, width: 32, n_layers: 3}
+  medium: {modes: 16, width: 64, n_layers: 4}
+  large: {modes: 32, width: 128, n_layers: 6}
+training:
+  epochs: 200
+  batch_size: 32
+  lr: 0.001
+slurm:
+  walltime_generate: "02:00:00"
+  walltime_train: "12:00:00"
+  n_gpus: 1

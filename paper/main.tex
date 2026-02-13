@@ -1,0 +1,50 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[numbers]{natbib}
+
+\title{Fourier Neural Operators for Delay Differential Equations}
+\author{Your Name(s)}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study operator learning for initial-value problems of delay differential equations (DDEs)
+using Fourier Neural Operators (FNOs). We benchmark on several families of DDEs with discrete
+and distributed delays, generate paired training data using high-accuracy solvers, and train a
+baseline FNO model to learn the solution operator mapping history functions and parameters to
+future trajectories.
+\end{abstract}
+
+\section{Introduction}
+\input{sections/introduction}
+
+\section{Delay Differential Equations Background}
+\input{sections/dde_background}
+
+\section{Numerical Methods for DDEs}
+\input{sections/dde_numerics}
+
+\section{Machine Learning Literature for DDEs}
+\input{sections/ml_literature}
+
+\section{Operator Learning and Fourier Neural Operators}
+\input{sections/fno_background}
+
+\section{Benchmarks: Families of DDEs}
+\input{sections/benchmarks}
+
+\section{Dataset Generation}
+\input{sections/data_generation}
+
+\section{Baseline FNO Experiments}
+\input{sections/experiments}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}

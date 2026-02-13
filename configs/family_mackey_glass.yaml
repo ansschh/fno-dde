@@ -1,0 +1,33 @@
+# Configuration for Mackey-Glass DDE Family
+# x'(t) = beta * x(t - tau) / (1 + x(t - tau)^n) - gamma * x(t)
+
+family: mackey_glass
+
+# Data settings
+data_dir: data/processed
+batch_size: 32
+num_workers: 4
+
+# Model settings - slightly larger for more complex dynamics
+model:
+  modes: 24
+  width: 96
+  n_layers: 5
+  activation: gelu
+  padding: 16
+
+use_residual: true
+
+# Training settings
+epochs: 200
+lr: 5e-4
+lr_min: 1e-6
+weight_decay: 1e-4
+grad_clip: 1.0
+save_every: 20
+
+# Dataset generation settings
+n_samples: 2000
+n_hist_points: 64
+n_future_points: 256
+seed: 42

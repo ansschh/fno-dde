@@ -1,0 +1,25 @@
+# Training config for Neutral DDE family
+# Derivative discontinuities at tau multiples → non-smooth solutions
+family: neutral
+
+batch_size: 32
+num_workers: 4
+
+model:
+  modes: 16
+  width: 64
+  n_layers: 4
+  activation: gelu
+  padding: 8
+  dropout: 0.1
+
+use_residual: true
+
+epochs: 200
+lr: 0.001
+lr_min: 0.000001
+scheduler: cosine
+weight_decay: 0.001
+grad_clip: 1.0
+save_every: 20
+patience: 40
