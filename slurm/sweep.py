@@ -186,6 +186,34 @@ def submit_script(script_content: str, dry_run: bool = False,
 # Main sweep logic
 # ---------------------------------------------------------------------------
 
+def _parse_walltime_seconds(wt: str) -> int:
+    """Parse HH:MM:SS to total seconds."""
+    parts = wt.split(":")
+    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+
+
+def _format_walltime(seconds: int) -> str:
+    """Format total seconds as HH:MM:SS."""
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def scale_walltime(base_walltime: str, n_train: int,
+                   reference_scale: int = 2000,
+                   max_hours: int = 48) -> str:
+    """Scale walltime linearly with data size (relative to reference_scale).
+
+    The base walltime covers reference_scale samples. For larger datasets,
+    scale linearly with a 1.25x safety margin. Clamped to [base, max_hours].
+    """
+    base_sec = _parse_walltime_seconds(base_walltime)
+    factor = max(1.0, (n_train / reference_scale)) * 1.25
+    scaled = min(int(base_sec * factor), max_hours * 3600)
+    return _format_walltime(scaled)
+
+
 def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
     sweep_name = cfg["sweep_name"]
     families = gather_families(cfg)
@@ -195,7 +223,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
     training_cfg = cfg["training"]
     slurm_cfg = cfg["slurm"]
 
-    walltime_gen = slurm_cfg.get("walltime_generate", "02:00:00")
+    walltime_gen_base = slurm_cfg.get("walltime_generate", "02:00:00")
     walltime_train = slurm_cfg.get("walltime_train", "12:00:00")
     n_gpus = slurm_cfg.get("n_gpus", 1)
     data_dir = args.data_dir
@@ -219,9 +247,12 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
     # Ensure slurm_logs exists
     ensure_dir(str(PROJECT_ROOT / "slurm_logs"))
 
-    # Track submitted job counts
+    # Track submitted job IDs — keyed by (family, n_train, seed) for
+    # correct per-run dependency chains (not global).
     gen_jobs: list[str] = []
+    gen_job_map: dict[tuple[str, int, int], str] = {}  # (family, n_train, seed) -> job_id
     train_jobs: list[str] = []
+    train_job_map: dict[tuple[str, int, int, str], str] = {}  # (family, n_train, seed, model) -> job_id
     eval_jobs: list[str] = []
 
     stage = args.stage  # "all", "generate", "train", "eval"
@@ -237,6 +268,11 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
         for family, n_train, seed in combos:
             n_val = max(n_train // 4, 100)
             n_test = max(n_train // 4, 100)
+
+            walltime_gen = scale_walltime(
+                walltime_gen_base, n_train,
+                reference_scale=min(data_scales),
+            )
 
             variables = {
                 "family":   family,
@@ -256,6 +292,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 jid = submit_script(filled)
                 if jid:
                     gen_jobs.append(jid)
+                    gen_job_map[(family, n_train, seed)] = jid
                     print(f"  Submitted generate {family} n={n_train} seed={seed} -> {jid}")
 
     # -----------------------------------------------------------------
@@ -299,11 +336,11 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
             }
             filled = fill_template(train_template, variables)
 
-            # If data generation jobs were submitted, add dependency
+            # Depend only on this run's generate job (not all gen jobs)
             extra_args: list[str] | None = None
-            if gen_jobs and stage == "all":
-                dep_str = ":".join(gen_jobs)
-                extra_args = [f"--dependency=afterok:{dep_str}"]
+            gen_jid = gen_job_map.get((family, n_train, seed))
+            if gen_jid and stage == "all":
+                extra_args = [f"--dependency=afterok:{gen_jid}"]
 
             if args.dry_run:
                 print(f"\n--- train: {family} {model_name} n={n_train} seed={seed} ---")
@@ -312,6 +349,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 jid = submit_script(filled, extra_sbatch_args=extra_args)
                 if jid:
                     train_jobs.append(jid)
+                    train_job_map[(family, n_train, seed, model_name)] = jid
                     print(
                         f"  Submitted train {family} {model_name} "
                         f"n={n_train} seed={seed} -> {jid}"
@@ -345,11 +383,11 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
             }
             filled = fill_template(eval_template, variables)
 
-            # If training jobs were submitted, add dependency
+            # Depend only on this run's training job (not all train jobs)
             extra_args = None
-            if train_jobs and stage == "all":
-                dep_str = ":".join(train_jobs)
-                extra_args = [f"--dependency=afterok:{dep_str}"]
+            train_jid = train_job_map.get((family, n_train, seed, model_name))
+            if train_jid and stage == "all":
+                extra_args = [f"--dependency=afterok:{train_jid}"]
 
             if args.dry_run:
                 print(f"\n--- eval: {family} {model_name} n={n_train} seed={seed} ---")

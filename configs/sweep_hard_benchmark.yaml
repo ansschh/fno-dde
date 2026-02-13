@@ -19,6 +19,6 @@ training:
   patience: 30
   save_every: 50
 slurm:
-  walltime_generate: "02:00:00"
+  walltime_generate: "04:00:00"
   walltime_train: "12:00:00"
   n_gpus: 1
