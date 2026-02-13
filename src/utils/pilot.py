@@ -344,13 +344,15 @@ def _generate_pde_data(family, n_train, n_val, n_test, data_path, seed):
         collected = 0
         shard_idx = 0
 
-        while collected < n_samples:
+        max_attempts = n_samples * 5
+        attempts = 0
+        while collected < n_samples and attempts < max_attempts:
+            attempts += 1
             params = fam.sample_params(rng)
             input_func = fam.sample_input_function(rng, x_grid)
 
             try:
-                t_grid = np.linspace(0, fam.config.T, fam.config.n_time)
-                solution = fam.solve(params, input_func, x_grid, t_grid)
+                solution = fam.solve(input_func, x_grid, params)
             except Exception:
                 continue
 
