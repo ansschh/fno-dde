@@ -179,7 +179,7 @@ def run_pilot(
         # --- Step 3: Evaluate ---
         print("[Pilot] Evaluating on test set...")
 
-        best_ckpt = torch.load(output_path / "best_model.pt", map_location=dev)
+        best_ckpt = torch.load(output_path / "best_model.pt", map_location=dev, weights_only=False)
         model.load_state_dict(best_ckpt["model_state_dict"])
 
         y_mean = train_loader.dataset.y_mean
@@ -349,11 +349,23 @@ def _generate_pde_data(family, n_train, n_val, n_test, data_path, seed):
         while collected < n_samples and attempts < max_attempts:
             attempts += 1
             params = fam.sample_params(rng)
-            input_func = fam.sample_input_function(rng, x_grid)
+
+            # KS has variable domain length — recompute x_grid per sample
+            sample_x_grid = x_grid
+            if fam.config.name == "ks":
+                L = params["L"]
+                sample_x_grid = np.linspace(0, L, fam.config.n_spatial, endpoint=False)
+
+            # Wave family needs c_contrast passed to sample_input_function
+            if fam.config.name == "wave":
+                c_contrast = params.get("c_contrast", 1.5)
+                input_func = fam.sample_input_function(rng, sample_x_grid, c_contrast=c_contrast)
+            else:
+                input_func = fam.sample_input_function(rng, sample_x_grid)
 
             try:
-                solution = fam.solve(input_func, x_grid, params)
-            except Exception:
+                solution = fam.solve(input_func, sample_x_grid, params)
+            except Exception as e:
                 continue
 
             if not np.all(np.isfinite(solution)):
@@ -368,7 +380,7 @@ def _generate_pde_data(family, n_train, n_val, n_test, data_path, seed):
             if len(input_list) >= shard_size or collected >= n_samples:
                 np.savez(
                     split_dir / f"shard_{shard_idx}.npz",
-                    x_grid=x_grid,
+                    x_grid=sample_x_grid,
                     input_func=np.array(input_list),
                     solution=np.array(sol_list),
                     params=np.array(params_list),
@@ -383,6 +395,7 @@ def _generate_pde_data(family, n_train, n_val, n_test, data_path, seed):
                     "n_spatial": fam.config.n_spatial},
         "param_names": fam.config.param_names,
         "state_dim": fam.config.state_dim,
+        "input_type": fam.config.input_type,
         "splits": {},
         "seed": seed,
         "generator": "python_pilot",

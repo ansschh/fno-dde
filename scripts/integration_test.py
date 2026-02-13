@@ -173,7 +173,7 @@ class IntegrationTest:
         # Load best checkpoint if available
         best_ckpt_path = Path(self.output_dir) / "best_model.pt"
         if best_ckpt_path.exists():
-            ckpt = torch.load(best_ckpt_path, map_location=dev)
+            ckpt = torch.load(best_ckpt_path, map_location=dev, weights_only=False)
             self._model.load_state_dict(ckpt["model_state_dict"])
 
         y_mean = self._train_loader.dataset.y_mean

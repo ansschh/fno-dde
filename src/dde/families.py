@@ -26,6 +26,7 @@ class DDEConfig:
     param_names: List[str]  # Names of parameters
     param_ranges: Dict[str, Tuple[float, float]]  # Parameter sampling ranges
     requires_positive: bool = False  # Whether solution must stay positive
+    stiff: bool = False  # Whether to use stiff solver (Radau)
 
 
 class DDEFamily(ABC):

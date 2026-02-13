@@ -123,9 +123,9 @@ class ShardedPDEDataset(Dataset):
         self.input_mean = self.inputs.mean(axis=(0, 1))   # (d_in,)
         self.input_std = self.inputs.std(axis=(0, 1)) + 1e-8
 
-        # Solution stats
-        self.sol_mean = self.solutions.mean(axis=(0, 1))   # (d_out,)
-        self.sol_std = self.solutions.std(axis=(0, 1)) + 1e-8
+        # Solution stats — use y_mean/y_std to match DDE dataset interface
+        self.y_mean = self.solutions.mean(axis=(0, 1))   # (d_out,)
+        self.y_std = self.solutions.std(axis=(0, 1)) + 1e-8
 
         # Parameter stats
         self.param_mean = self.params.mean(axis=0)   # (P,)
@@ -154,7 +154,7 @@ class ShardedPDEDataset(Dataset):
         # Normalize
         if self.normalize:
             inp_norm = (inp - self.input_mean) / self.input_std
-            sol_norm = (sol - self.sol_mean) / self.sol_std
+            sol_norm = (sol - self.y_mean) / self.y_std
             params_norm = (params - self.param_mean) / self.param_std
         else:
             inp_norm = inp
@@ -186,8 +186,8 @@ class ShardedPDEDataset(Dataset):
             "params": torch.from_numpy(params).float(),
             "x": torch.from_numpy(self.x_grid).float(),
             # Normalization stats for denormalization during evaluation
-            "target_mean": torch.from_numpy(self.sol_mean).float().unsqueeze(0),
-            "target_std": torch.from_numpy(self.sol_std).float().unsqueeze(0),
+            "target_mean": torch.from_numpy(self.y_mean).float().unsqueeze(0),
+            "target_std": torch.from_numpy(self.y_std).float().unsqueeze(0),
         }
 
     def get_input_channels(self) -> int:
@@ -202,8 +202,8 @@ class ShardedPDEDataset(Dataset):
         """Denormalize solution tensor."""
         if not self.normalize:
             return sol_norm
-        mean = torch.from_numpy(self.sol_mean).to(sol_norm.device).float()
-        std = torch.from_numpy(self.sol_std).to(sol_norm.device).float()
+        mean = torch.from_numpy(self.y_mean).to(sol_norm.device).float()
+        std = torch.from_numpy(self.y_std).to(sol_norm.device).float()
         return sol_norm * std + mean
 
 
@@ -235,8 +235,8 @@ def create_pde_dataloaders(
     for ds in [val_ds, test_ds]:
         ds.input_mean = train_ds.input_mean
         ds.input_std = train_ds.input_std
-        ds.sol_mean = train_ds.sol_mean
-        ds.sol_std = train_ds.sol_std
+        ds.y_mean = train_ds.y_mean
+        ds.y_std = train_ds.y_std
         ds.param_mean = train_ds.param_mean
         ds.param_std = train_ds.param_std
 

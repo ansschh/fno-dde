@@ -401,18 +401,49 @@ def create_sharded_dataloaders(
         val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers)
         test_loader = DataLoader(test_ds, batch_size=batch_size, num_workers=num_workers)
     else:
-        train_ds = ShardedDDEDataset(data_dir, family, "train")
-        val_ds = ShardedDDEDataset(data_dir, family, "val")
-        test_ds = ShardedDDEDataset(data_dir, family, "test")
+        # Auto-detect PDE vs DDE family by checking manifest for input_type
+        is_pde = False
+        manifest_path = Path(data_dir) / family / "manifest.json"
+        if manifest_path.exists():
+            import json as _json
+            with open(manifest_path) as _f:
+                _manifest = _json.load(_f)
+            is_pde = "input_type" in _manifest or _manifest.get("generator") == "python_pilot" and "domain" in _manifest.get("config", {})
+            # More reliable: check if shards have "input_func" key (PDE) vs "phi" key (DDE)
+            split_dir = Path(data_dir) / family / "train"
+            shard_files = sorted(split_dir.glob("shard_*.npz"))
+            if shard_files:
+                import numpy as _np
+                _shard = _np.load(shard_files[0], allow_pickle=True)
+                is_pde = "input_func" in _shard.files
 
-        # Share normalization from training set
-        for ds in [val_ds, test_ds]:
-            ds.phi_mean = train_ds.phi_mean
-            ds.phi_std = train_ds.phi_std
-            ds.y_mean = train_ds.y_mean
-            ds.y_std = train_ds.y_std
-            ds.param_mean = train_ds.param_mean
-            ds.param_std = train_ds.param_std
+        if is_pde:
+            from datasets.pde_dataset import ShardedPDEDataset
+            train_ds = ShardedPDEDataset(data_dir, family, "train")
+            val_ds = ShardedPDEDataset(data_dir, family, "val")
+            test_ds = ShardedPDEDataset(data_dir, family, "test")
+
+            # Share normalization from training set
+            for ds in [val_ds, test_ds]:
+                ds.input_mean = train_ds.input_mean
+                ds.input_std = train_ds.input_std
+                ds.y_mean = train_ds.y_mean
+                ds.y_std = train_ds.y_std
+                ds.param_mean = train_ds.param_mean
+                ds.param_std = train_ds.param_std
+        else:
+            train_ds = ShardedDDEDataset(data_dir, family, "train")
+            val_ds = ShardedDDEDataset(data_dir, family, "val")
+            test_ds = ShardedDDEDataset(data_dir, family, "test")
+
+            # Share normalization from training set
+            for ds in [val_ds, test_ds]:
+                ds.phi_mean = train_ds.phi_mean
+                ds.phi_std = train_ds.phi_std
+                ds.y_mean = train_ds.y_mean
+                ds.y_std = train_ds.y_std
+                ds.param_mean = train_ds.param_mean
+                ds.param_std = train_ds.param_std
 
         # Distributed training uses DistributedSampler instead of shuffle
         if distributed:
