@@ -536,7 +536,7 @@ def main():
 
     # Resume if specified
     if args.resume:
-        checkpoint = torch.load(args.resume, map_location=device)
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         if is_main:
             print(f"Resumed from {args.resume}")
@@ -570,7 +570,7 @@ def main():
             config=config.get('model', {}),
             use_residual=config.get('use_residual', False),
         )
-        best_checkpoint = torch.load(output_dir / 'best_model.pt', map_location=device)
+        best_checkpoint = torch.load(output_dir / 'best_model.pt', map_location=device, weights_only=False)
         eval_model.load_state_dict(best_checkpoint['model_state_dict'])
         eval_model.to(device)
 

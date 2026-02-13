@@ -9,9 +9,12 @@
 #SBATCH --output=slurm_logs/%j_%x.out
 #SBATCH --error=slurm_logs/%j_%x.err
 
-module load cuda python/3.10
+module load python/3.10 2>/dev/null || module load python 2>/dev/null || true
+module load cuda 2>/dev/null || true
 
 cd $SLURM_SUBMIT_DIR
+source venv/bin/activate
+
 torchrun --nproc_per_node={n_gpus} --standalone \
     src/train/train_fno_sharded.py \
     --config={config_path} \

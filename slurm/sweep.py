@@ -121,15 +121,22 @@ def make_eval_dir(sweep_name: str, family: str, model_name: str,
 def write_auto_config(path: str, family: str, model_cfg: dict,
                       training_cfg: dict, data_dir: str, n_train: int,
                       seed: int) -> None:
-    """Write a per-run YAML training config for use by train_fno_sharded.py."""
+    """Write a per-run YAML training config for use by train_fno_sharded.py.
+
+    The config must use flat keys (batch_size, epochs, lr, etc.) because
+    load_config() deep-merges with DEFAULT_CONFIG which expects flat layout.
+    """
     config = {
         "family": family,
         "data_dir": data_dir,
         "seed": seed,
         "n_train": n_train,
         "model": dict(model_cfg),
-        "training": dict(training_cfg),
+        "use_residual": True,
     }
+    # Flatten training params to top level (matching DEFAULT_CONFIG layout)
+    for key, value in training_cfg.items():
+        config[key] = value
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w") as f:
@@ -278,7 +285,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 write_auto_config(
                     str(PROJECT_ROOT / config_path),
                     family, model_cfg, training_cfg,
-                    f"{data_dir}/{family}", n_train, seed,
+                    data_dir, n_train, seed,
                 )
 
             variables = {
@@ -286,7 +293,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 "walltime":    walltime_train,
                 "n_gpus":      str(n_gpus),
                 "config_path": config_path,
-                "data_dir":    f"{data_dir}/{family}",
+                "data_dir":    data_dir,
                 "output_dir":  output_dir,
                 "seed":        str(seed),
             }
@@ -328,11 +335,11 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
             eval_dir = make_eval_dir(
                 sweep_name, family, model_name, n_train, seed
             )
-            checkpoint_path = f"{output_dir}/best.pt"
+            checkpoint_path = f"{output_dir}/best_model.pt"
 
             variables = {
                 "family":          family,
-                "data_dir":        f"{data_dir}/{family}",
+                "data_dir":        data_dir,
                 "checkpoint_path": checkpoint_path,
                 "eval_dir":        eval_dir,
             }

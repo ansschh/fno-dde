@@ -8,10 +8,13 @@
 #SBATCH --output=slurm_logs/%j_%x.out
 #SBATCH --error=slurm_logs/%j_%x.err
 
-module load cuda python/3.10
+module load python/3.10 2>/dev/null || module load python 2>/dev/null || true
+module load cuda 2>/dev/null || true
 
 cd $SLURM_SUBMIT_DIR
-python src/benchmarks/eval_comprehensive.py \
+source venv/bin/activate
+
+python3 src/benchmarks/eval_comprehensive.py \
     --checkpoint={checkpoint_path} \
     --family={family} \
     --data_dir={data_dir} \

@@ -5,13 +5,19 @@ families:
 data_scales: [2000, 10000, 50000]
 seeds: [42, 123, 456]
 model_configs:
-  small: {modes: 8, width: 32, n_layers: 3}
-  medium: {modes: 16, width: 64, n_layers: 4}
-  large: {modes: 32, width: 128, n_layers: 6}
+  small: {modes: 8, width: 32, n_layers: 3, padding: 4, dropout: 0.0}
+  medium: {modes: 16, width: 64, n_layers: 4, padding: 8, dropout: 0.1}
+  large: {modes: 32, width: 128, n_layers: 6, padding: 16, dropout: 0.1}
 training:
   epochs: 200
   batch_size: 32
   lr: 0.001
+  lr_min: 0.000001
+  weight_decay: 0.001
+  grad_clip: 1.0
+  scheduler: cosine
+  patience: 30
+  save_every: 50
 slurm:
   walltime_generate: "02:00:00"
   walltime_train: "12:00:00"

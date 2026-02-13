@@ -326,9 +326,17 @@ def generate_dataset_python(config: ShardConfig):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate DDE dataset (Python solver)")
+    # Get valid family names dynamically from the registry
+    try:
+        from dde.families import DDE_FAMILIES
+        valid_families = list(DDE_FAMILIES.keys())
+    except ImportError:
+        valid_families = ["linear2", "hutch", "mackey_glass", "vdp",
+                         "predator_prey", "dist_uniform", "dist_exp",
+                         "neutral", "chaotic_mg", "forced_duffing",
+                         "multi_delay_comb", "stiff_vdp"]
     parser.add_argument("family", type=str,
-                        choices=["linear2", "hutch", "mackey_glass", "vdp",
-                                "predator_prey", "dist_uniform", "dist_exp"],
+                        choices=valid_families,
                         help="DDE family name")
     parser.add_argument("--output_dir", type=str, default="data")
     parser.add_argument("--n_train", type=int, default=800)

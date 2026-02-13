@@ -72,7 +72,9 @@ cat > slurm_logs/pilot_all.sbatch << 'PILOT_EOF'
 #SBATCH --output=slurm_logs/%j_pilot_all.out
 #SBATCH --error=slurm_logs/%j_pilot_all.err
 
-module load cuda python/3.10
+module load python/3.10 2>/dev/null || module load python 2>/dev/null || true
+module load cuda 2>/dev/null || true
+
 source venv/bin/activate
 cd $SLURM_SUBMIT_DIR
 
@@ -101,26 +103,13 @@ PILOT_EOF
 PILOT_JOB=$(sbatch slurm_logs/pilot_all.sbatch | awk '{print $4}')
 echo "    Pilot job submitted: $PILOT_JOB"
 
-# --- 5. Full benchmark sweep (after pilots) ---
+# --- 5. Full benchmark sweep (after pilots, single invocation for proper deps) ---
 echo ""
-echo "[5] Submitting full benchmark sweep (depends on pilot)..."
+echo "[5] Submitting full benchmark sweep (all stages with dependencies)..."
 
-# Stage 1: Data generation (CPU jobs, no GPU needed)
-echo "    [5a] Data generation jobs..."
+# Single invocation with --stage all ensures generate→train→eval dependencies work
 python3 slurm/sweep.py configs/sweep_hard_benchmark.yaml \
-    --stage generate --data_dir data 2>&1 | tail -5
-
-# Stage 2: Training (GPU jobs, depend on data gen)
-echo ""
-echo "    [5b] Training jobs..."
-python3 slurm/sweep.py configs/sweep_hard_benchmark.yaml \
-    --stage train --data_dir data 2>&1 | tail -5
-
-# Stage 3: Evaluation (GPU jobs, depend on training)
-echo ""
-echo "    [5c] Evaluation jobs..."
-python3 slurm/sweep.py configs/sweep_hard_benchmark.yaml \
-    --stage eval --data_dir data 2>&1 | tail -5
+    --stage all --data_dir data 2>&1 | tail -10
 
 # --- 6. Summary ---
 echo ""

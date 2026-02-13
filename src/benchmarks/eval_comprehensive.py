@@ -22,7 +22,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmarks.model_metrics import ModelMetrics, compute_all_metrics
-from datasets.sharded_dataset import ShardedDDEDataset
+from datasets.sharded_dataset import ShardedDDEDataset, create_sharded_dataloaders
 from models.fno1d import create_fno1d
 from models.baselines import create_baseline
 
@@ -39,7 +39,19 @@ def evaluate_on_split(
 ) -> Dict:
     """Evaluate model on a single split."""
     try:
-        dataset = ShardedDDEDataset(str(data_dir), family, split, normalize=True)
+        # Auto-detect PDE vs DDE by checking shard contents
+        split_dir = Path(data_dir) / family / split
+        shard_files = sorted(split_dir.glob("shard_*.npz"))
+        is_pde = False
+        if shard_files:
+            _shard = np.load(shard_files[0], allow_pickle=True)
+            is_pde = "input_func" in _shard.files
+
+        if is_pde:
+            from datasets.pde_dataset import ShardedPDEDataset
+            dataset = ShardedPDEDataset(str(data_dir), family, split, normalize=True)
+        else:
+            dataset = ShardedDDEDataset(str(data_dir), family, split, normalize=True)
     except FileNotFoundError:
         return {"error": f"Split not found: {split}"}
     
