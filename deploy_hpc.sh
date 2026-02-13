@@ -38,7 +38,7 @@ echo "    Installing dependencies..."
 pip install --upgrade pip -q
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 -q 2>/dev/null || \
     pip install torch torchvision -q
-pip install numpy scipy matplotlib pyyaml h5py -q
+pip install numpy scipy matplotlib pyyaml h5py tensorboard tqdm -q
 
 echo "    Python: $(python3 --version)"
 echo "    PyTorch: $(python3 -c 'import torch; print(torch.__version__)')"
