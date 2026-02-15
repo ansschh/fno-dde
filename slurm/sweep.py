@@ -100,6 +100,15 @@ def gather_families(cfg: dict[str, Any]) -> list[str]:
 # Job generation
 # ---------------------------------------------------------------------------
 
+def make_data_dir(base_data_dir: str, seed: int) -> str:
+    """Return a per-seed data directory to avoid concurrent-write corruption.
+
+    Each seed gets its own data directory so that parallel generation jobs
+    never write shards to the same directory.
+    """
+    return f"{base_data_dir}_s{seed}"
+
+
 def make_config_path(sweep_name: str, family: str, model_name: str,
                      n_train: int, seed: int) -> str:
     """Return a path for an auto-generated training config."""
@@ -274,13 +283,15 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 reference_scale=min(data_scales),
             )
 
+            seed_data_dir = make_data_dir(data_dir, seed)
+
             variables = {
                 "family":   family,
                 "walltime": walltime_gen,
                 "n_train":  str(n_train),
                 "n_val":    str(n_val),
                 "n_test":   str(n_test),
-                "data_dir": data_dir,
+                "data_dir": seed_data_dir,
                 "seed":     str(seed),
             }
             filled = fill_template(gen_template, variables)
@@ -317,12 +328,14 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 sweep_name, family, model_name, n_train, seed
             )
 
+            seed_data_dir = make_data_dir(data_dir, seed)
+
             # Write the auto-generated per-run config
             if not args.dry_run:
                 write_auto_config(
                     str(PROJECT_ROOT / config_path),
                     family, model_cfg, training_cfg,
-                    data_dir, n_train, seed,
+                    seed_data_dir, n_train, seed,
                 )
 
             variables = {
@@ -330,7 +343,7 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
                 "walltime":    walltime_train,
                 "n_gpus":      str(n_gpus),
                 "config_path": config_path,
-                "data_dir":    data_dir,
+                "data_dir":    seed_data_dir,
                 "output_dir":  output_dir,
                 "seed":        str(seed),
             }
@@ -373,11 +386,12 @@ def run_sweep(cfg: dict[str, Any], args: argparse.Namespace) -> None:
             eval_dir = make_eval_dir(
                 sweep_name, family, model_name, n_train, seed
             )
+            seed_data_dir = make_data_dir(data_dir, seed)
             checkpoint_path = f"{output_dir}/best_model.pt"
 
             variables = {
                 "family":          family,
-                "data_dir":        data_dir,
+                "data_dir":        seed_data_dir,
                 "checkpoint_path": checkpoint_path,
                 "eval_dir":        eval_dir,
             }
