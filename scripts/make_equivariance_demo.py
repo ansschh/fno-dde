@@ -71,51 +71,49 @@ def main():
     C_state = sample["target"].shape[-1]
     with torch.no_grad():
         y_unshifted = model(x)
-    rows_input, rows_pred, errs = [], [], []
+    # T1 in pictures: visualize LEMO(roll_k x) (TOP row) vs roll_k(LEMO(x))
+    # (BOTTOM row) at a fixed output lag.  The two rows should be visually
+    # identical up to float32 numerical precision (~5e-3 rel-err).
+    t_show = -1     # output frame to render (last future frame)
+    chan = 0
+    left_panels, right_panels, errs = [], [], []
     with torch.no_grad():
         for k in SHIFTS:
-            # CORRECT T1 test: shift the entire input tensor uniformly along
-            # the lag axis (all channels — state, mask, time, params).
-            # Shifting only state would feed the model an inconsistent
-            # input that no theorem covers.
             x_shifted = torch.roll(x, shifts=int(k), dims=1)
-            y_shift = model(x_shifted)
-            y_roll  = torch.roll(y_unshifted, shifts=int(k), dims=1)
+            y_shift = model(x_shifted)              # LEMO(roll_k x)
+            y_roll  = torch.roll(y_unshifted, shifts=int(k), dims=1)  # roll_k(LEMO x)
             num = (y_shift - y_roll).flatten(1).norm(dim=1).item()
             den = max(y_roll.flatten(1).norm(dim=1).item(), 1e-12)
-            rel = num / den
-            errs.append(rel)
-            # Visualization: show the first state-channel frame of the
-            # rolled input at lag=0 (which after shift = old state at t=-k).
-            rows_input.append(x_shifted[0, 0, ..., 0].cpu().numpy())
-            rows_pred.append(y_shift[0, -1, ..., 0].cpu().numpy())
+            errs.append(num / den)
+            left_panels.append(y_shift[0, t_show, ..., chan].cpu().numpy())
+            right_panels.append(y_roll[0, t_show, ..., chan].cpu().numpy())
+    # Shared symmetric colour limits across both rows.
+    vmax = max(max(np.abs(a).max() for a in left_panels),
+               max(np.abs(a).max() for a in right_panels))
     fig, axes = plt.subplots(2, len(SHIFTS), figsize=(2.0 * len(SHIFTS), 4.4),
-                              gridspec_kw={"wspace": 0.06, "hspace": 0.18})
+                              gridspec_kw={"wspace": 0.05, "hspace": 0.10})
     if len(SHIFTS) == 1:
         axes = axes.reshape(2, 1)
-    inp_max = max(np.abs(arr).max() for arr in rows_input)
-    pred_max = max(np.abs(arr).max() for arr in rows_pred)
-    for j, (k, inp, pred, err) in enumerate(zip(SHIFTS, rows_input, rows_pred, errs)):
+    for j, (k, top, bot, err) in enumerate(zip(SHIFTS, left_panels, right_panels, errs)):
         for ax in axes[:, j]:
             ax.set_xticks([]); ax.set_yticks([])
-        axes[0, j].imshow(inp, cmap="RdBu_r", vmin=-inp_max, vmax=inp_max)
-        axes[1, j].imshow(pred, cmap="RdBu_r", vmin=-pred_max, vmax=pred_max)
+        axes[0, j].imshow(top, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+        axes[1, j].imshow(bot, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
         axes[0, j].set_title(f"$k = {k}$", fontsize=10)
-        # Annotate equivariance error on bottom row.  Pass = 1% rel-err
-        # (float32 FFT precision floor for 3 blocks).
         col = "green" if err < 1e-2 else "red"
-        axes[1, j].text(0.02, 0.98, f"$e_k = {err:.1e}$",
-                          transform=axes[1, j].transAxes, fontsize=8,
+        axes[0, j].text(0.02, 0.98, f"$e_k = {err:.1e}$",
+                          transform=axes[0, j].transAxes, fontsize=8,
                           va="top", ha="left", color=col,
                           bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
-                                      alpha=0.85, edgecolor="none"))
-    axes[0, 0].set_ylabel(r"input $\rho_k x$",
-                            rotation=0, ha="right", va="center", fontsize=10)
-    axes[1, 0].set_ylabel(r"pred $\mathrm{LEMO}(\rho_k x)$",
-                            rotation=0, ha="right", va="center", fontsize=10)
-    fig.suptitle(("Cyclic-shift equivariance at deployment "
-                  + r"($e_k = \|\mathrm{LEMO}(\rho_k x) - \rho_k \mathrm{LEMO}(x)\|_2/\|\mathrm{LEMO}(x)\|_2$)"),
-                 fontsize=11)
+                                      alpha=0.9, edgecolor="none"))
+    axes[0, 0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x)$",
+                            rotation=0, ha="right", va="center", fontsize=11)
+    axes[1, 0].set_ylabel(r"$\rho_k\,\mathrm{LEMO}(x)$",
+                            rotation=0, ha="right", va="center", fontsize=11)
+    fig.suptitle(("Cyclic-shift equivariance: rows are visually identical iff "
+                  + r"$\mathrm{LEMO}\circ\rho_k = \rho_k\circ\mathrm{LEMO}$ "
+                  + "(float32 FFT floor $\\sim 5\\!\\times\\!10^{-3}$)"),
+                 fontsize=11, y=1.02)
     out = FIG / "M4_equivariance_demo.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
