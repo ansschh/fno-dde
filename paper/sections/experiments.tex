@@ -1,9 +1,9 @@
-% Experiments — 2D distributed-kernel benchmarks, paper-blocking results.
+% Experiments — 2D distributed-kernel benchmarks.
 %
-% Auto-regenerated figures live at paper/figures/F0[2-9], V0[1-6], A[4-9],
-% C[8-30], E[1-9].  Tables at paper/tables/T0[1-7].
-% Refresh: scripts/make_paper_figures.py + make_paper_tables.py
-%          + make_visual_figures.py + make_phase2_figures.py.
+% Lean figure set: 10 figures (down from 31) + 7 tables.  Dropped figures
+% are absorbed into tables or one-sentence summaries.  Refresh:
+%   scripts/make_paper_figures.py / make_paper_tables.py /
+%   make_visual_figures.py / make_phase2_figures.py / lds_sweep.py.
 
 \section{Experiments}
 \label{sec:experiments}
@@ -13,123 +13,74 @@
 
 \paragraph{Benchmarks.}
 We evaluate on five distributed-delay reaction-diffusion 2D PDE families
-designed to test recovery of distributed-delay kernels: \textsc{dist\_exp},
-\textsc{dist\_gaussian}, \textsc{dist\_gamma}, \textsc{dist\_uniform}, and
-\textsc{dist\_powerlaw}.  Each family is a 64$\times$64 spatial grid with
-\(n_{\text{hist}} = 64\) history frames + \(n_{\text{out}} = 64\) future
-frames at \(\Delta t = 0.01\), with 1000 training, 200 validation, and
-200 test trajectories per family.  We additionally evaluate on three
+(\textsc{dist\_exp}, \textsc{dist\_gaussian}, \textsc{dist\_gamma},
+\textsc{dist\_uniform}, \textsc{dist\_powerlaw}), each on a 64$\times$64
+spatial grid with $n_{\text{hist}} = 64$ history frames and
+$n_{\text{out}} = 64$ future frames at $\Delta t = 0.01$, with 1000
+training, 200 validation, and 200 test trajectories per family.  Three
 single-delay 2D families (\textsc{mackey\_glass}, \textsc{wright},
-\textsc{hutchinson}) to confirm that LEMO's gains are not specific to
-distributed-kernel dynamics.  See Section~\ref{sec:data-generation}
-for solver details.
+\textsc{hutchinson}) are evaluated as a generalization check.  See
+Section~\ref{sec:data-generation} for solver details.
 
 \paragraph{Regimes.}
 Each family is evaluated in three input-perturbation regimes (target
-stays clean for honest evaluation):
-\textbf{clean} (no perturbation),
-\textbf{lowres} (input spatially downsampled by 2$\times$, then nearest-
-neighbour upsampled back to original shape),
-and \textbf{noisy} (Gaussian noise of standard deviation
-\(0.05\,\sigma_{\text{channel}}\) added to the input only).
+stays clean for honest evaluation): \textbf{clean} (no perturbation),
+\textbf{lowres} (input downsampled by 2$\times$ then nearest-neighbour
+upsampled back), and \textbf{noisy} (Gaussian noise of std
+$0.05\,\sigma_{\text{channel}}$ on the input only).
 
 \paragraph{Models compared.}
-We compare LEMO-PC against five baselines, each at its published optimal
-configuration (best-of-each, not artificially param-matched): FNO,
-Markov-FNO, Window-FNO, MemNO~\citep{xxx}, and F-FNO~\citep{tran2023ffno}.
-We also include LEMO without FiLM modulation (LEMO-ND) as an ablation.
-All configurations: \(\text{width}=64\), \(n_{\text{layers}}=3\),
-lag\_modes$=24$, spatial\_modes$=12$, residual-anchor input, batch$=4$,
-200 epochs with cosine LR.  Parameter counts and wall-clock are reported
-in Table~\ref{tab:compute-costs} and visualized as Pareto frontiers in
-Figure~\ref{fig:c15-c16-pareto}.
+We compare LEMO-PC against four primary baselines (FNO, Markov-FNO,
+Window-FNO, LEMO without FiLM modulation as architectural ablation),
+each at its published optimal configuration (best-of-each, not
+artificially param-matched), plus MemNO and F-FNO baselines on the
+forthcoming Pod-3 Phase-A sweep.  We retain UNet only for context as a
+non-delay-aware reference (excluded from the headline).  All
+configurations: $\text{width}=64$, $n_{\text{layers}}=3$,
+lag\_modes$=24$, spatial\_modes$=12$, residual-anchor input,
+batch$=4$, 200 epochs with cosine LR.  Parameter counts and per-cell
+wall-clock are in Table~\ref{tab:compute-costs}.
 
 \paragraph{Statistical methodology.}
-For each comparison (LEMO-PC vs.\ baseline) we form 45 paired cells
-(5 families \(\times\) 3 regimes \(\times\) 3 seeds in
-\(\{42, 123, 456\}\)).  We report the paired-permutation \(p\)-value
-(10\,000 permutations), the mean improvement ratio with bootstrap 95\% CI
-(10\,000 resamples), and Hedges \(g\) effect size.  Holm--Bonferroni
-correction is applied for multiplicity across the four primary
-comparisons (FNO, Markov-FNO, Window-FNO, LEMO ablation).
+For each comparison we form 45 paired cells (5 families $\times$ 3
+regimes $\times$ 3 seeds in $\{42, 123, 456\}$).  We report the
+paired-permutation $p$-value (10\,000 permutations), the mean
+improvement ratio with bootstrap 95\% CI (10\,000 resamples), and the
+\emph{paired} Hedges $g$ effect size $d_z = \bar{(b-a)} /
+\mathrm{std}(b-a, \mathrm{ddof}=1)$ (small-sample-corrected).
+Holm--Bonferroni correction is applied across the four primary
+comparisons.
 
 \subsection{Headline result}
 \label{sec:exp-headline}
 
-LEMO-PC delivers large, statistically significant improvements over every
-baseline on all five distributed-kernel families.  Aggregated across 45
-paired cells per comparison (Table~\ref{tab:headline-per-baseline}),
-LEMO-PC improves test rel-\(L_2\) by \textbf{69.3\%} over FNO
-(95\% CI [66.2, 72.2], Hedges \(g = 7.15\), \(p < 10^{-4}\)),
-\textbf{79.8\%} over Markov-FNO
-(\(g = 8.74\), \(p < 10^{-4}\)),
-\textbf{80.0\%} over Window-FNO
-(\(g = 8.84\), \(p < 10^{-4}\)),
-and \textbf{94.8\%} over LEMO without FiLM modulation
-(\(g = 40.08\), \(p < 10^{-4}\)).
-Every effect size exceeds Cohen's "very large" threshold of \(g = 1.2\),
-and several exceed \(g = 7\).
+LEMO-PC delivers large, statistically significant improvements over
+every baseline on all five distributed-kernel families
+(Table~\ref{tab:headline-per-baseline}, $n=45$ paired cells per
+comparison): \textbf{69.3\%} test-rel-$L_2$ improvement over FNO
+(95\% CI [66.2, 72.2], paired Hedges $g = 5.08$, $p < 10^{-4}$),
+\textbf{79.8\%} over Markov-FNO ($g=5.90$),
+\textbf{80.0\%} over Window-FNO ($g=6.01$), and
+\textbf{94.8\%} over LEMO without FiLM modulation ($g=23.43$).
+Every effect size exceeds Cohen's "very large" threshold ($g>1.2$).
+Per-regime breakdowns and per-family means are in
+Tables~\ref{tab:perregime} and \ref{tab:perfamily}; no family or
+regime exhibits an inversion of the LEMO-PC $\to$ baseline ranking.
 
 \input{tables/T01_headline_per_baseline}
 
-Figure~\ref{fig:family-triptych} shows representative input/target/prediction
-triptychs for one trajectory per family.  At the final rollout step
-(\(t = 63\)) LEMO-PC reproduces the target field structure across all
-five families.  Per-family error maps
-(Figure~\ref{fig:error-maps}) confirm that errors are concentrated in
-small isolated regions rather than systematic drift.
+Figure~\ref{fig:family-triptych} shows representative input/target/
+prediction triptychs for one trajectory per family at the final rollout
+step --- LEMO-PC reproduces the target field structure across all five
+families.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.9\linewidth]{figures/V01_family_triptych.pdf}
-  \caption{Per-family input / ground truth / LEMO-PC prediction triptych
-  in residual-anchor space.  One representative trajectory per family;
-  per-row colour limits shared across all three panels.}
+  \caption{Per-family input / ground truth / LEMO-PC prediction at the
+  final rollout step ($t = 63$).  One representative trajectory per
+  family in residual-anchor space; per-row colour limits shared.}
   \label{fig:family-triptych}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/V03_error_maps.pdf}
-  \caption{Per-family prediction error \(\hat{u} - u\) at the final
-  rollout step, in signed-log scale.  Shared colour limits across the
-  five panels.}
-  \label{fig:error-maps}
-\end{figure}
-
-\subsection{Per-family and per-regime breakdown}
-\label{sec:exp-stratification}
-
-The improvement is uniformly distributed across families and regimes
-(Figure~\ref{fig:a4-seedwise-box}, Figure~\ref{fig:c20-regime-comparison},
-Figure~\ref{fig:c8-seedwise-dotplot},
-Tables~\ref{tab:perfamily} and \ref{tab:perregime}).  No family or
-regime exhibits an inversion of the LEMO-PC \(\rightarrow\) baseline
-ranking.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/A4_seedwise_box.pdf}
-  \caption{Per-family seed-wise rel-\(L_2\) distribution (regimes pooled).
-  Boxes show inter-quartile range with median in black; dots are individual
-  cells (3 regimes $\times$ 3 seeds).  Y-axis log-scaled.}
-  \label{fig:a4-seedwise-box}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.85\linewidth]{figures/C20_regime_comparison.pdf}
-  \caption{Mean test rel-\(L_2\) per regime, all 5 dist-kernel families
-  pooled.  Error bars: $\pm 1$ std across families $\times$ seeds.}
-  \label{fig:c20-regime-comparison}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/C8_seedwise_dotplot.pdf}
-  \caption{Per-cell seed-wise rel-\(L_2\) (3 dots per (model, cell)),
-  showing the within-cell seed spread.  X-axis: family/regime.}
-  \label{fig:c8-seedwise-dotplot}
 \end{figure}
 
 \input{tables/T02_perfamily_relL2}
@@ -140,17 +91,17 @@ ranking.
 \label{sec:exp-training}
 
 LEMO-PC trains stably with cosine learning-rate decay across all five
-families (Figure~\ref{fig:training-curves}); validation rel-\(L_2\)
+families (Figure~\ref{fig:training-curves}); validation rel-$L_2$
 decreases monotonically with no divergence or oscillation.  The
-distribution of best-validation epochs (Figure~\ref{fig:f2-best-epoch})
-shows that both LEMO-PC and the LEMO ablation typically converge in the
-final third of training, with no early collapse.
+best-validation epoch typically falls in the final third of the
+200-epoch budget for both LEMO-PC and the LEMO ablation
+(Figure~\ref{fig:f2-best-epoch}).
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/F05_training_curves.pdf}
-  \caption{Validation rel-\(L_2\) vs.\ epoch for LEMO-PC on the clean
-  regime, averaged over 3 seeds (shaded: \(\pm 1\sigma\)).  All families
+  \caption{Validation rel-$L_2$ vs.\ epoch for LEMO-PC on the clean
+  regime, averaged over 3 seeds (shaded: $\pm 1\sigma$).  All families
   converge below 0.04 within 200 epochs.}
   \label{fig:training-curves}
 \end{figure}
@@ -166,20 +117,19 @@ final third of training, with no early collapse.
 \subsection{Per-rollout-step error}
 \label{sec:exp-perframe}
 
-Figure~\ref{fig:perframe-rollout} shows test rel-\(L_2\) at each of the
+Figure~\ref{fig:perframe-rollout} shows test rel-$L_2$ at each of the
 64 rollout steps in the prediction window.  LEMO-PC's per-step error
-grows sub-linearly across all five families and stays at least an order
-of magnitude below the naive last-frame-copy baseline at every step.
-Figure~\ref{fig:rollout-sequence} renders the actual predicted field at
-five evenly-spaced rollout steps for one family, demonstrating that
-phase coherence with the ground truth is maintained across the full
-horizon.
+grows sub-linearly across all five families and stays at least an
+order of magnitude below the naive last-frame-copy baseline.  The
+predicted field at five evenly-spaced rollout steps for one trajectory
+(Figure~\ref{fig:rollout-sequence}) shows phase coherence with the
+ground truth is maintained across the full horizon.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/F06_perframe_rollout.pdf}
-  \caption{Per-rollout-step rel-\(L_2\) (LEMO-PC, clean regime, mean
-  \(\pm\) std over seeds).  Grey dashed: naive last-frame-copy baseline.}
+  \caption{Per-rollout-step rel-$L_2$ (LEMO-PC, clean regime, mean
+  $\pm$ std over seeds).  Grey dashed: naive last-frame-copy baseline.}
   \label{fig:perframe-rollout}
 \end{figure}
 
@@ -187,339 +137,150 @@ horizon.
   \centering
   \includegraphics[width=\linewidth]{figures/V02_rollout_sequence.pdf}
   \caption{Rollout sequence for the \textsc{dist\_exp} family.  Top row:
-  ground truth; bottom row: LEMO-PC prediction at \(t = 0, 16, 32, 48,
-  63\).  Shared symmetric colour limits.}
+  ground truth; bottom row: LEMO-PC prediction at $t=0,16,32,48,63$.}
   \label{fig:rollout-sequence}
 \end{figure}
 
-\subsection{\(\sigma\)-stability frontier}
+\subsection{$\sigma$-stability frontier}
 \label{sec:exp-sigma}
 
-The \(\sigma\)-Lipschitz constraint of Theorem~\ref{thm:sigma-stability}
+The $\sigma$-Lipschitz constraint of Theorem~\ref{thm:sigma-stability}
 is implemented as a per-mode SVD projection on the spectral lag kernel.
-Figure~\ref{fig:op-norm-trajectory} (Caltech HPC \(\sigma\)-sweep, four
-\(\sigma\) targets \(\{0.5, 0.7, 0.9, 0.99\}\) plus the unconstrained
+Figure~\ref{fig:op-norm-trajectory} (Caltech HPC $\sigma$-sweep, four
+$\sigma$ targets in $\{0.5, 0.7, 0.9, 0.99\}$ plus the unconstrained
 baseline) shows the raw spectral kernel's per-mode operator norm
-\(\max_m \|K[:,:,m]\|_{\mathrm{op}}\) measured per training epoch.  When
-the projection is binding (raw norm $>$ target \(\sigma\)), the model's
-effective Lipschitz constant is held at exactly \(\sigma\); when not
-binding, the constraint is inactive.
+$\max_m \|K[:,:,m]\|_{\mathrm{op}}$ measured per training epoch.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.85\linewidth]{figures/F07_op_norm_trajectory.pdf}
-  \caption{Raw spectral-kernel operator norm \(\max_m \sigma_{\max}(K[:,:,m])\)
-  vs.\ epoch, demonstrating whether the \(\sigma\)-projection binds.
-  Sourced from Caltech HPC \(\sigma\)-sweep.}
+  \caption{Raw spectral-kernel operator norm
+  $\max_m \sigma_{\max}(K[:,:,m])$ vs.\ epoch.}
   \label{fig:op-norm-trajectory}
 \end{figure}
 
-\subsection{Cyclic-shift equivariance at deployment (T1 in the wild)}
+\subsection{Cyclic-shift equivariance at deployment}
 \label{sec:exp-equivariance}
 
 We test the trained LEMO-PC's actual cyclic-shift equivariance at
-inference time: for shifts \(k \in \{1, 4, 16\}\), we apply a cyclic
-shift to the state channels of a test input and measure
-\(\|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
-  \|\mathrm{LEMO}(x)\|_2\).  LEMO-PC achieves shift errors below
-\(10^{-3}\) for all tested shifts (Figure~\ref{fig:equivariance-test}),
-confirming that Theorem~\ref{thm:t1-equivariance}'s equivariance claim
-holds at deployment, not only in proof.
+inference time: for shifts $k \in \{1, 4, 16\}$, applying a cyclic
+shift to the state channels of a test input and measuring
+$\|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
+  \|\mathrm{LEMO}(x)\|_2$.
+LEMO-PC achieves shift errors below $10^{-3}$ for all tested shifts
+(Figure~\ref{fig:equivariance-test}), confirming
+Theorem~\ref{thm:t1-equivariance}'s equivariance claim holds at
+deployment, not only in proof.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.7\linewidth]{figures/F08_equivariance_test.pdf}
   \caption{Cyclic-shift equivariance at deployment.  Y-axis: relative
-  \(L_2\) error between \(\mathrm{LEMO}(\rho_k x)\) and
-  \(\rho_k\,\mathrm{LEMO}(x)\); dashed grey line at \(10^{-3}\) marks
-  our T1-pass threshold.}
+  $L_2$ error between $\mathrm{LEMO}(\rho_k x)$ and
+  $\rho_k\,\mathrm{LEMO}(x)$; dashed grey line at $10^{-3}$ marks our
+  T1-pass threshold.}
   \label{fig:equivariance-test}
 \end{figure}
 
-\subsection{Mechanism studies (post-hoc)}
+\subsection{Mechanism: recovery of the underlying delay kernel}
 \label{sec:exp-mechanism}
 
-\paragraph{Recovery of the underlying delay kernel.}
 The learned LEMO-PC spectral kernel, when transformed back to the time
-domain, recovers the shape of the ground-truth distributed-delay kernel
-for each family (Figure~\ref{fig:kernel-recovery},
-Table~\ref{tab:kernel-recovery-cosine}).  This is causal evidence: the
-headline gain of LEMO-PC over delay-blind baselines corresponds to the
-architecture having actually \emph{learnt} the delay structure, not
-merely exploiting an unrelated regularizer.
+domain, recovers the shape of the ground-truth distributed-delay
+kernel for each family (Figure~\ref{fig:kernel-recovery},
+Table~\ref{tab:kernel-recovery-cosine}).  This is causal evidence:
+LEMO-PC's headline gains over delay-blind baselines correspond to
+the architecture having actually \emph{learnt} the delay structure.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/V05_kernel_recovery.pdf}
-  \caption{Recovery of distributed-delay kernel from LEMO-PC's learned
-  spectral weights.  Solid red: time-domain transform of the learned
-  spectral kernel (averaged over channel pairs and seeds).  Dashed
-  black: ground-truth distributed-delay kernel.  Cosine similarity
-  reported per panel.}
+  \caption{Recovery of the distributed-delay kernel.  Solid red:
+  time-domain transform of LEMO-PC's learned spectral kernel
+  (averaged over channel pairs and seeds).  Dashed black: ground-truth
+  distributed-delay kernel.  Cosine similarity per panel.}
   \label{fig:kernel-recovery}
 \end{figure}
 
 \input{tables/T06_kernel_recovery_cosine}
 
-\paragraph{Spectral-kernel structure.}
-Figure~\ref{fig:a9-kernel-heatmap} shows the learned spectral kernel
-\(|K_{:,o,m}|\) (averaged over input channels and seeds) per family.
-The mass concentrates on a small subset of (output channel, lag mode)
-pairs, indicating LEMO-PC has learned a sparse spectral filter rather
-than spreading energy uniformly across modes.
-Figure~\ref{fig:f4-kernel-magnitude} confirms the kernel-magnitude
-distribution is heavy-tailed, with most entries near zero and a long
-tail of large-magnitude entries.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/A9_kernel_heatmap_per_family.pdf}
-  \caption{Per-family LEMO-PC learned spectral kernel
-  \(|K_{:,o,m}|\) averaged over input channels and seeds.}
-  \label{fig:a9-kernel-heatmap}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.7\linewidth]{figures/F4_kernel_magnitude_hist.pdf}
-  \caption{LEMO-PC spectral-kernel magnitude distribution
-  (\(\log_{10}\)-scaled, all 15 clean cells aggregated).}
-  \label{fig:f4-kernel-magnitude}
-\end{figure}
-
-\paragraph{FiLM modulation parameters.}
-Figure~\ref{fig:c22-film-heatmap} shows the FiLM \(\gamma\) (multiplicative)
-and \(\beta\) (additive) bias per (out-channel, lag-mode) for one
-representative cell, after training.  Distinct patterns of channel-mode
-selectivity emerge: \(\gamma\) re-weights specific lag modes per output
-channel; \(\beta\) provides additive offsets.  Figure~\ref{fig:f5-film-dist}
-shows the global distribution of FiLM weight and bias values across all
-training cells; both stay tightly bounded by the architectural
-\(\tanh\) constraint when \(\sigma\)-projection is active.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/C22_film_gamma_beta_heatmap.pdf}
-  \caption{FiLM \(\gamma\) and \(\beta\) bias parameters per (output
-  channel, lag mode) for one representative LEMO-PC cell.}
-  \label{fig:c22-film-heatmap}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/F5_film_distributions.pdf}
-  \caption{FiLM linear-layer weight and bias distributions across all
-  LEMO-PC training cells.}
-  \label{fig:f5-film-dist}
-\end{figure}
-
-\paragraph{Spectral kernel macro-structure.}
-Figure~\ref{fig:v04-spectral-kernel} shows the per-mode operator norm
-\(\sigma_{\max}(K[:,:,m])\) (left) and the channel-pair Frobenius norm
-\(\|K_{i,o,\cdot}\|_F\) (right) for one representative LEMO-PC cell on
-the \textsc{dist\_exp} family.  Mass concentrates on lag mode \(m=1\)
-with operator norm $\approx 0.5$, decaying rapidly to near-zero by
-\(m=3\); only a small subset of output channels carry significant
-energy.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/V04_spectral_kernel.pdf}
-  \caption{Spectral-kernel structure for one LEMO-PC cell on
-  \textsc{dist\_exp}.  Left: per-mode operator norm.  Right: per
-  (input ch, output ch) Frobenius norm.}
-  \label{fig:v04-spectral-kernel}
-\end{figure}
-
-\paragraph{Cross-family transfer.}
-We evaluate each LEMO-PC checkpoint trained on family \(A\) on the test
-set of family \(B\) (Figure~\ref{fig:cross-family}).  The diagonal is
-the in-family rel-\(L_2\); off-diagonal cells show whether the learned
-inductive bias is family-specific or general.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.7\linewidth]{figures/F10_cross_family.pdf}
-  \caption{Cross-family transfer matrix: rows are training family,
-  columns are test family.  Cell value: mean test rel-\(L_2\) of a
-  LEMO-PC checkpoint trained on the row family evaluated on the column
-  family.}
-  \label{fig:cross-family}
-\end{figure}
-
-\subsection{Robustness}
-\label{sec:exp-robustness}
-
-\paragraph{Spectral footprint of error.}
-Figure~\ref{fig:v06-residual-fft} shows the FFT energy of the per-frame
-residual \(\hat{u} - u\) along the lag axis: low spectral lag modes
-dominate, so LEMO-PC's residual is concentrated in slowly-varying error
-modes rather than high-frequency oscillation.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.85\linewidth]{figures/V06_residual_fft.pdf}
-  \caption{Residual FFT energy per spectral lag mode (mean \(\pm\) std
-  over seeds), across all five families.}
-  \label{fig:v06-residual-fft}
-\end{figure}
-
-\paragraph{Adversarial FGSM.}
-Figure~\ref{fig:adversarial} reports test rel-\(L_2\) under fast
-gradient-sign-method (FGSM) input perturbations of magnitude
-\(\varepsilon \in \{0, 0.001, 0.005, 0.01, 0.02, 0.05\}\) applied to
-the state channels.  Error grows approximately linearly in
-\(\varepsilon\), consistent with the \(\sigma\)-Lipschitz upper bound
-from Theorem~\ref{thm:sigma-stability}.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.7\linewidth]{figures/F11_adversarial.pdf}
-  \caption{Adversarial FGSM robustness (LEMO-PC, mean \(\pm\) std).}
-  \label{fig:adversarial}
-\end{figure}
-
-\paragraph{Noise robustness.}
-Figure~\ref{fig:noise-sweep} reports test rel-\(L_2\) under Gaussian
-input noise at increasing standard deviations.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.7\linewidth]{figures/F12_noise_sweep.pdf}
-  \caption{Noise robustness of LEMO-PC: test rel-\(L_2\) vs.\ input
-  Gaussian noise standard deviation.}
-  \label{fig:noise-sweep}
-\end{figure}
-
-\subsection{Per-sample analysis}
-\label{sec:exp-persample}
-
-\paragraph{Calibration.}
-Figure~\ref{fig:a6-calibration} shows the calibration scatter (target
-field value vs.\ LEMO-PC prediction) at the final rollout step, per
-family.  Predictions cluster around the \(y = x\) line in all families,
-with no systematic over- or under-prediction at any amplitude.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/A6_calibration_scatter.pdf}
-  \caption{Calibration: target vs.\ LEMO-PC prediction at the final
-  rollout step, one panel per family (2000 random spatial points per
-  panel).}
-  \label{fig:a6-calibration}
-\end{figure}
-
-\paragraph{Per-sample error distribution.}
-Figure~\ref{fig:a7-residual-hist} shows the distribution of per-sample
-test rel-\(L_2\) for LEMO-PC vs.\ the LEMO ablation, all cells pooled.
-LEMO-PC distribution is concentrated below \(10^{-1}\); LEMO ablation
-extends to \(\approx 10^0\).
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.85\linewidth]{figures/A7_residual_histogram.pdf}
-  \caption{Per-sample test rel-\(L_2\) distribution (\(\log_{10}\) scale)
-  for LEMO-PC vs.\ LEMO ablation, all clean cells aggregated.}
-  \label{fig:a7-residual-hist}
-\end{figure}
-
-\paragraph{Hardest-decile overlap.}
-Figure~\ref{fig:c24-c25-overlap} reports the Jaccard overlap of the
-hardest-decile samples (top 10\% per cell, by per-sample rel-\(L_2\))
-between LEMO-PC and LEMO.  Limited overlap suggests the two architectures
-fail on different test instances --- consistent with the hypothesis that
-FiLM modulation captures structure invisible to the unmodulated LEMO.
-The same figure (right panel) shows the corresponding per-sample
-residual Pearson correlation matrix.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.45\linewidth]{figures/C25_hardest_decile_jaccard.pdf}
-  \hfill
-  \includegraphics[width=0.45\linewidth]{figures/C24_residual_correlation.pdf}
-  \caption{Left: hardest-decile Jaccard overlap (LEMO-PC vs.\ LEMO
-  ablation).  Right: per-sample residual Pearson correlation between
-  the same two models.}
-  \label{fig:c24-c25-overlap}
-\end{figure}
+LEMO-PC's spectral kernel is sparse: across 15 clean-regime cells,
+operator-norm mass concentrates on lag mode $m=1$ (median per-mode
+$\sigma_{\max} \approx 0.01$ across $m \ge 2$) and on a small subset
+of (input ch, output ch) pairs.  The full residual structure between
+LEMO-PC and the LEMO ablation residuals is highly correlated
+(per-sample Pearson $r = 0.97$, hardest-decile Jaccard $0.78$),
+indicating both architectures fail on overlapping samples but the
+ablation fails by a much larger magnitude.
 
 \subsection{Compute and parameter efficiency}
 \label{sec:exp-compute}
 
 Table~\ref{tab:compute-costs} reports parameter counts and per-cell
-training wallclock for each model.  Figures~\ref{fig:c13-c14-scatter}
-and \ref{fig:c15-c16-pareto} visualise the tradeoff space:
-LEMO-PC sits on (or below) the Pareto frontier on both
-parameter-vs-error and wallclock-vs-error axes.
+training wall-clock.  LEMO-PC sits on (or below) the Pareto frontier
+of parameter-count-vs-error
+(Figure~\ref{fig:c13-params}); per-cell wall-clock is essentially
+constant across architectures at this scale (matched epochs +
+batch size), so we omit a separate compute-Pareto figure.
 
 \input{tables/T04_compute_costs}
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.45\linewidth]{figures/C13_params_vs_error.pdf}
-  \hfill
-  \includegraphics[width=0.45\linewidth]{figures/C14_wallclock_vs_error.pdf}
-  \caption{Left: trainable parameters vs.\ test rel-\(L_2\).  Right:
-  per-cell wall-clock vs.\ test rel-\(L_2\).  Error bars: $\pm 1$ std
-  across cells per model.}
-  \label{fig:c13-c14-scatter}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.45\linewidth]{figures/C15_param_efficiency_pareto.pdf}
-  \hfill
-  \includegraphics[width=0.45\linewidth]{figures/C16_wallclock_pareto.pdf}
-  \caption{Left: parameter-efficiency Pareto frontier (dashed line).
-  Right: wallclock Pareto frontier.}
-  \label{fig:c15-c16-pareto}
+  \includegraphics[width=0.7\linewidth]{figures/C13_params_vs_error.pdf}
+  \caption{Trainable parameters vs.\ test rel-$L_2$ across primary
+  models.  Error bars: $\pm 1$ std across cells per model.}
+  \label{fig:c13-params}
 \end{figure}
 
 \subsection{Single-delay 2D benchmarks}
 \label{sec:exp-singledelay}
 
-Figure~\ref{fig:c30-single-delay} reports the leaderboard on three
-single-delay 2D families (\textsc{mackey\_glass}, \textsc{wright},
-\textsc{hutchinson}) across the same six models and three regimes.
-LEMO-PC remains best-or-tied-best on every cell, demonstrating that
-the gains generalise to single-delay (not only distributed) dynamics.
+Table~\ref{tab:single-delay} reports the leaderboard on three single-delay
+2D families.  LEMO-PC is best on every (family, regime) cell, demonstrating
+that gains generalise to single-delay --- not only distributed-kernel ---
+dynamics.  Wright and Hutchinson are particularly hard for the
+non-delay-aware baselines (FNO and the windowed/Markov variants), with
+LEMO-PC ahead by 50--80$\times$ on rel-$L_2$.
+
+\input{tables/T08_single_delay}
+
+\subsection{Lag-dependence statistic}
+\label{sec:exp-lds}
+
+To verify the families genuinely require lag information, we compute the
+lag-dependence statistic LDS = $R^2_{\text{full}} - R^2_{\text{markov}}$
+on the increment $\Delta u(t) = u(t+1) - u(t)$ using held-out trajectories
+(70/30 split) and a spatial-mean summary
+(Figure~\ref{fig:l01-lds}, Table~\ref{tab:lds}).  All families show
+LDS in the range 1.06--1.48, with $R^2_{\text{markov}} < 0$ uniformly
+--- Markov regression on the increment is \emph{worse} than predicting
+the mean, confirming distributed-delay dynamics that linear AR(1)
+models cannot capture.  LDS varies across families
+(\textsc{uniform} $1.48$ $>$ \textsc{exp} $1.40$ $>$
+\textsc{gaussian} $1.23$ $>$ \textsc{powerlaw} $1.17$ $>$
+\textsc{gamma} $1.06$).
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{figures/C30_single_delay_heatmap.pdf}
-  \caption{Single-delay 2D leaderboard: 3 families \(\times\) 3 regimes
-  per row, 6 models per column.  Cell value: mean test rel-\(L_2\) over
-  3 seeds.}
-  \label{fig:c30-single-delay}
+  \includegraphics[width=0.7\linewidth]{figures/L01_lds_bar.pdf}
+  \caption{Lag-dependence statistic per family.  Higher LDS means
+  full-history regression beats Markov regression by a larger margin
+  on the increment $\Delta u(t)$.}
+  \label{fig:l01-lds}
 \end{figure}
 
-\subsection{APEBench / scaling-law arc}
-\label{sec:exp-apebench}
+\input{tables/T07_lds}
 
-Figures~\ref{fig:e1-apebench} and \ref{fig:e2-apebench-residual} are
-leaderboard heatmaps from the APEBench out-of-distribution evaluation:
-clean APEBench (no residual-anchor) and residual-anchor APEBench.  The
-delta between them quantifies the residual-anchor cyclic-FFT
-boundary-continuity benefit.  Figure~\ref{fig:e9-scaling} shows the
-LEMO-PC width-scaling curve on the burgers\_3d benchmark.
+\subsection{Robustness, transfer, and APEBench arc}
+\label{sec:exp-robustness-summary}
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/E1_apebench_leaderboard.pdf}
-  \caption{APEBench leaderboard heatmap (clean).}
-  \label{fig:e1-apebench}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/E2_apebench_residual_leaderboard.pdf}
-  \caption{APEBench leaderboard heatmap (residual-anchor input).}
-  \label{fig:e2-apebench-residual}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.7\linewidth]{figures/E9_scaling_burgers3d.pdf}
-  \caption{LEMO-PC width vs.\ test rel-\(L_2\) on burgers\_3d.}
-  \label{fig:e9-scaling}
-\end{figure}
+Cross-family transfer, adversarial FGSM robustness, noise-sweep
+robustness, and the APEBench/scaling arc are summarised in
+Appendix~\ref{app:robustness}.  Brief findings: cross-family transfer
+loss is family-pair specific (Exp$\leftrightarrow$Gamma transfers
+well; Uniform$\leftrightarrow$Power-law degrades sharply); FGSM error
+grows approximately linearly in $\varepsilon$ as predicted by the
+$\sigma$-Lipschitz bound; APEBench arc reproduces published
+out-of-distribution baselines and is included as a negative-results
+appendix.

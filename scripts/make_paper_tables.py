@@ -340,6 +340,70 @@ def t05_perregime_perbaseline(stats: dict):
     return out
 
 
+def t08_single_delay():
+    """Single-delay 2D leaderboard: 3 families x 3 regimes x 5 models
+    (UNet excluded from headline; LEMO ablation kept).  Best entry per row
+    is bolded.  Replaces the C30 heatmap."""
+    base_p1 = EXT / "pod1" / "outputs" / "layer5_final_sweep_p1" / "raw"
+    base_p2 = EXT / "pod2" / "outputs" / "layer5_final_sweep_p2" / "raw"
+    sd_fams = ["mackey_glass_2d", "wright_2d", "hutchinson_2d"]
+    sd_labels = {"mackey_glass_2d": "Mackey-Glass", "wright_2d": "Wright",
+                  "hutchinson_2d": "Hutchinson"}
+    models = ["lemo_pc_nd", "lemo_nd", "fno_nd", "markov_fno_nd",
+              "windowed_fno_nd"]
+    if not (base_p1.exists() or base_p2.exists()):
+        return None
+    rows_data = []
+    for fam in sd_fams:
+        for reg in REGIMES:
+            row_vals = []
+            for mdl in models:
+                vals = []
+                for base in (base_p1, base_p2):
+                    if not base.exists():
+                        continue
+                    for seed in SEEDS:
+                        p = base / fam / reg / mdl / seed / "test_results.json"
+                        d = _try_json(p)
+                        if d is not None:
+                            r = d.get("test_rel_l2_mean", d.get("test_rel_l2"))
+                            if r is not None:
+                                vals.append(float(r))
+                row_vals.append(float(np.mean(vals)) if vals else None)
+            rows_data.append((fam, reg, row_vals))
+    if not rows_data:
+        return None
+    body = ["\\begin{tabular}{ll" + "c" * len(models) + "}",
+            r"\toprule",
+            r"Family & Regime & " + " & ".join(MODEL_LABELS[m].replace(r"\textbf{", "").replace("}", "") for m in models) + r" \\",
+            r"\midrule"]
+    for fam, reg, vals in rows_data:
+        finite = [v for v in vals if v is not None]
+        if not finite:
+            continue
+        best = min(finite)
+        cells = []
+        for v in vals:
+            if v is None:
+                cells.append("--")
+            elif abs(v - best) < 1e-9:
+                cells.append(f"\\textbf{{{v:.3f}}}")
+            else:
+                cells.append(f"{v:.3f}")
+        body.append(f"{sd_labels[fam]} & {reg} & " + " & ".join(cells) + r" \\")
+    body += [r"\bottomrule",
+             r"\end{tabular}"]
+    s = _wrap_table(body,
+                    caption=("Single-delay 2D test rel-$L_2$ across "
+                             "Mackey-Glass, Wright, Hutchinson families "
+                             "(mean over 3 seeds).  Best per row in bold.  "
+                             "UNet excluded (not delay-aware)."),
+                    label="tab:single-delay")
+    out = TABLE_DIR / "T08_single_delay.tex"
+    out.write_text("\n".join(s))
+    return out
+
+
 def main():
     print(f"[paper-tables] working dir: {REPO}")
     stats = _try_json(STATS_PATH) or {}
@@ -356,6 +420,7 @@ def main():
         ("T03 per-regime",     t03_perregime,          (data,)),
         ("T04 compute costs",  t04_compute_costs,      (data,)),
         ("T05 per-regime impr", t05_perregime_perbaseline, (stats,)),
+        ("T08 single-delay",   t08_single_delay,       ()),
     ]:
         try:
             out = fn(*args)
