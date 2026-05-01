@@ -1,0 +1,13 @@
+family: dist_exp
+model_class: memno
+batch_size: 32
+epochs: 3
+lr: 0.001
+grad_clip: 1.0
+num_workers: 0
+
+model:
+  width: 48
+  n_layers: 3
+  n_memory: 16
+  modes: 12

@@ -1,0 +1,17 @@
+family: dist_exp
+model_class: vanillafno
+batch_size: 32
+epochs: 3
+lr: 5.0e-4
+weight_decay: 3.0e-3
+grad_clip: 1.0
+num_workers: 0
+
+# Vanilla FNO (no padding) ablation baseline from the MFNO paper.
+# Same 5-layer/modes=64/32-channel core as MFNO; no mirror padding.
+model:
+  latent_channels: 32
+  modes: 64
+  num_layers: 5
+  projection_channels: 128
+  activation: gelu

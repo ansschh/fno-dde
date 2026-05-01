@@ -96,3 +96,46 @@ By differentiating $m(t)$, we convert this to a system with a discrete delay:
   \item $\beta \sim \mathrm{Unif}[-2.0, 2.0]$
   \item $\tau \sim \mathrm{Unif}[0.1, 2.0]$
 \end{itemize}
+
+\subsection{Extended benchmark (Phase B)}
+
+The five families above constitute the frozen baseline.  For the
+extended benchmark (Section~\ref{sec:experiments}, Phase B) we add
+two further families to cover regimes under-represented above:
+
+\paragraph{Van der Pol with discrete delay (VdP).}
+A single-delay nonlinear oscillator:
+\begin{equation}
+  x''(t) - \mu \bigl(1 - x(t)^2\bigr) x'(t) + x(t - \tau) = 0.
+\end{equation}
+Complements Hutchinson (single-attractor dissipative) with a
+self-excited limit-cycle regime that is common in biology and
+circuits literature.
+
+\paragraph{Distributed delay with uniform kernel (DistUniform).}
+Structurally identical to Family~5 but with a uniform kernel truncated
+to $[0, \tau_{\max}]$ rather than a moving-average window.  Included as
+a second continuous-$\tau$ target so that the continuous-lag
+equivariance story is verified on two independent distributed-delay
+families rather than one.
+
+Together with the two-delay variant of Family~1
+(Linear2, $x'(t) = a\,x(t) + b_1\,x(t - \tau_1) + b_2\,x(t - \tau_2)$,
+already present in the data pipeline as the hardest phase-interference
+stress test), the extended benchmark covers seven families across
+four regime axes: smooth-distributed vs.\ discrete, linear vs.\
+nonlinear, dissipative vs.\ oscillatory vs.\ chaotic, and 1D vs.\ 2D
+coupled.
+
+\paragraph{Evaluation splits.}
+Each family is evaluated on in-distribution plus up to three
+out-of-distribution splits.  Following the convention of the frozen
+baseline we retain \emph{lag-shift} (unseen discrete $\tau$) and
+\emph{horizon} (prediction beyond the training horizon).  Families
+with smooth $\tau$-dependence (DistExp, DistUniform, Hutchinson) add
+a \emph{continuous-$\tau$} split that samples real-valued $\tau$
+outside the training grid.  Families with strong sensitivity to
+initial-condition magnitude (VdP, Mackey--Glass, Predator--Prey) add
+a \emph{history-amplitude} split that tests generalization to
+larger-amplitude history functions.  Linear2 is evaluated on
+$\{\text{ID}, \text{lag-shift}, \text{horizon}\}$ only.

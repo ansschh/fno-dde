@@ -1,0 +1,141 @@
+sweep_name: phase_b_core_dde_v1
+
+# =============================================================================
+# Phase B — core DDE benchmark
+#
+# Spec from EXPERIMENTATION_PLAN.txt §4 / §8:
+#   11 models × 7 families × ~4 splits × 3 seeds ≈ 700 runs after dedup.
+# Per-run cost target: ~20 min on H100 ≈ 240 cluster-hours at 16-way
+# parallelism ≈ 15 wall-hours.
+#
+# Axes not yet ready (see blockers note below this file's docstring):
+#   - mackey_glass, predator_prey: configs exist, data not generated.
+#   - continuous_tau split: no generator exists yet; gated on landing
+#     src/datasets/generate_continuous_tau.py.
+# The orchestrator (slurm/sweep_phase_b.py) skips (family, split) pairs
+# whose data dir is absent, so you can launch the v1 sweep today on the
+# 5 ready families × 3 available splits and top up MG/PP/continuous-τ
+# once their pipelines land.
+# =============================================================================
+
+families:
+  main:    [dist_exp, vdp, hutch, mackey_glass, predator_prey]
+  appendix: [dist_uniform, linear2]
+
+# Plan §4: each family runs on a per-regime-relevant subset of splits.
+splits: [id, lag_shift, horizon, continuous_tau, history_amplitude]
+split_applicability:
+  dist_exp:       [id, lag_shift, horizon, continuous_tau]
+  dist_uniform:   [id, lag_shift, horizon, continuous_tau]
+  hutch:          [id, lag_shift, horizon, continuous_tau]
+  vdp:            [id, lag_shift, horizon, history_amplitude]
+  mackey_glass:   [id, lag_shift, horizon, history_amplitude]
+  predator_prey:  [id, lag_shift, horizon, history_amplitude]
+  linear2:        [id, lag_shift, horizon]
+
+# Full data-dir path keyed on split, relative to repo root (or absolute).
+# The id dir is combined with --data_dir; OOD dirs are absolute names so
+# they map onto the frozen-baseline layout: data_ood_delay/<family>/test_ood/.
+#
+# --per-seed on the CLI appends `_s{seed}` to each path (used only when
+# regenerating data per seed for concurrent-write safety).
+split_data_dir:
+  id:                 ""                       # placeholder: uses --data_dir directly
+  lag_shift:          "data_ood_delay"
+  horizon:            "data_ood_horizon"
+  history_amplitude:  "data_ood_history"
+  continuous_tau:     "data_ood_continuous_tau"
+
+# 11 models per §5 must-have list. Each entry bundles the model_class
+# token consumed by src/train/build_model.py plus its per-class kwargs.
+# Per-model learning-rate overrides live in `training_overrides` below.
+model_configs:
+  plainmlp:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+  mlp_shiftaug_16:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 16
+  mlp_shiftaug_64:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 64
+  fno1d:
+    model_class: fno1d
+    modes: 12
+    width: 48
+    n_layers: 3
+    activation: gelu
+    padding: 8
+    dropout: 0.1
+  deeponet:
+    model_class: deeponet
+    p: 64
+    branch_hidden: 128
+    trunk_hidden: 128
+    depth: 4
+  memno:
+    model_class: memno
+  anie:
+    model_class: anie
+    dim_emb: 64
+    n_head: 4
+    n_blocks: 3
+    n_ff: 64
+    attention_type: galerkin
+    max_iterations: 3
+    smoothing_factor: 0.5
+  localno:
+    model_class: localno
+    task: darcy
+    variant: diff
+  lno:
+    model_class: lno
+    width: 48
+    modes: 16
+  mfno:
+    model_class: mfno
+    latent_channels: 32
+    modes: 64
+    num_layers: 5
+    projection_channels: 128
+    activation: gelu
+  lemo:
+    model_class: lemo
+    # defaults inherit from configs/dry_run/lemo_unconstrained.yaml
+  lemo_sigma_09:
+    model_class: lemo
+    sigma: 0.9
+
+# Single data scale per plan §8 ("3 seeds", no data-size sweep in Phase B).
+data_scales: [10000]
+seeds: [42, 123, 456]
+
+training:
+  epochs: 200
+  batch_size: 32
+  lr: 1.0e-3
+  lr_min: 1.0e-6
+  weight_decay: 1.0e-3
+  grad_clip: 1.0
+  scheduler: cosine
+  patience: 30
+  save_every: 50
+
+# Per-model-class overrides (applied on top of `training`). Matches
+# what configs/dry_run/*.yaml already uses.
+training_overrides:
+  mfno:  {lr: 5.0e-4, weight_decay: 3.0e-3}
+  lno:   {lr: 2.0e-3, weight_decay: 1.0e-4}
+  anie:  {batch_size: 16}
+
+slurm:
+  walltime_generate: "04:00:00"
+  walltime_train: "12:00:00"
+  n_gpus: 1

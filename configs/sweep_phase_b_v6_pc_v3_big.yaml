@@ -1,0 +1,46 @@
+sweep_name: phase_b_lemo_pc_v3_big
+families:
+  hard:
+  - linear2
+  - predator_prey
+seeds:
+- 42
+- 123
+- 456
+splits:
+- id
+- lag_shift
+split_applicability:
+  linear2:        [id, lag_shift]
+  predator_prey:  [id]
+split_data_dir:
+  id: ''
+  lag_shift: data_ood_delay
+model_configs:
+  lemo_pc_v3_big:
+    model_class: lemo_pc_v3
+    width: 64
+    n_layers: 4
+    modes: 32
+    film_hidden: 128
+    params_dim: 5
+    sigma: null
+  lemo_pc_v3_big_sigma_09:
+    model_class: lemo_pc_v3
+    width: 64
+    n_layers: 4
+    modes: 32
+    film_hidden: 128
+    params_dim: 5
+    sigma: 0.9
+training:
+  batch_size: 32
+  epochs: 200
+  grad_clip: 1.0
+  lr: 0.001
+  lr_min: 1.0e-06
+  patience: 30
+  save_every: 50
+  scheduler: cosine
+  weight_decay: 0.001
+training_overrides: {}

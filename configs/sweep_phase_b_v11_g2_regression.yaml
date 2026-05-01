@@ -1,0 +1,50 @@
+# G2 regression: lemo_pc_nd with spatial_shape=() should match lemo_pc_v3
+# numerically on existing 1D Phase B cells.  Single cell × single seed
+# × full budget (patience=200) for fast verification.
+sweep_name: phase_b_g2_regression
+families:
+  appendix:
+  - dist_uniform
+seeds:
+- 42
+splits:
+- id
+split_applicability:
+  dist_uniform: [id]
+split_data_dir:
+  id: ''
+model_configs:
+  lemo_pc_nd_1d:
+    model_class: lemo_pc_nd
+    width: 48
+    n_layers: 3
+    lag_modes: 16
+    film_hidden: 64
+    params_dim: 5
+    sigma: null
+    spatial_shape: []
+  lemo_nd_1d:
+    model_class: lemo_nd
+    width: 48
+    n_layers: 3
+    kernel_hidden: 64
+    sigma: null
+    spatial_shape: []
+  fno_nd_1d:
+    model_class: fno_nd
+    width: 48
+    n_layers: 3
+    modes: [12]
+    activation: gelu
+    dropout: 0.1
+training:
+  batch_size: 32
+  epochs: 200
+  grad_clip: 1.0
+  lr: 0.001
+  lr_min: 1.0e-06
+  patience: 200
+  save_every: 50
+  scheduler: cosine
+  weight_decay: 0.001
+training_overrides: {}

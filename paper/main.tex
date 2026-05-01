@@ -1,12 +1,36 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
 \usepackage{hyperref}
 \usepackage[numbers]{natbib}
 
-\title{Fourier Neural Operators for Delay Differential Equations}
+% ----- Theorem environments -----
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% ----- Paper <-> Lean cross-reference -----
+% Usage: \leanref{LEMO/DiscreteCore.lean}{lagConv\_shift}
+% Emits an italic end-of-proof note pointing to the machine-checked
+% counterpart. Entries are kept in sync with notes/formalization\_status.csv.
+\newcommand{\leanref}[2]{%
+  \hfill\textit{\small Formalized in \texttt{#1} as \texttt{#2}.}\par%
+}
+
+\title{LEMO: Lag-Equivariant Memory Operators for Delay-Structured PDEs}
 \author{Your Name(s)}
 \date{\today}
 
@@ -14,11 +38,26 @@
 \maketitle
 
 \begin{abstract}
-We study operator learning for initial-value problems of delay differential equations (DDEs)
-using Fourier Neural Operators (FNOs). We benchmark on several families of DDEs with discrete
-and distributed delays, generate paired training data using high-accuracy solvers, and train a
-baseline FNO model to learn the solution operator mapping history functions and parameters to
-future trajectories.
+We introduce \textbf{LEMO}, a neural operator architecture that respects the cyclic
+shift-equivariance latent in delay-structured dynamics: shifting the lag axis of the input
+history shifts the output trajectory commutatively.  The equivariance property is formalized as
+a Lean theorem (T1, cyclic group $\mathbb{Z}/L\mathbb{Z}$ acting on the lag axis), with abstract
+generalizations to arbitrary finite abelian groups, ND extensions, and sample-complexity
+implications.  An $\sigma$-stability variant adds a per-mode operator-norm projection
+$\|K[:,:,m]\|_{\mathrm{op}} \le \sigma$ that yields a certified Lipschitz bound on the learned
+operator.  Empirically, on five distributed-kernel reaction-diffusion benchmarks
+$\partial_t u = D\Delta u + \int_0^{\tau_{\max}} K(s) f(u(t-s))\,\mathrm{d}s$ with kernels
+\textsc{exp}, \textsc{gaussian}, \textsc{gamma}, \textsc{uniform}, and \textsc{powerlaw},
+LEMO\textsubscript{PC} reduces test relL$_2$ by \textbf{69.3\%} over FNO,
+\textbf{79.8\%} over Markov-FNO, and \textbf{80.0\%} over Windowed-FNO
+(paired-permutation $p<10^{-4}$, Holm-corrected; bootstrap 95\% CIs $[66.2, 72.2]$,
+$[77.7, 81.8]$, $[77.9, 82.0]$; $n=45$ paired cells across 5 families $\times$ 3 regimes
+$\times$ 3 seeds).  An ablation removing per-mode FiLM modulation (LEMO\textsubscript{ND})
+collapses performance by 95\%, isolating the architectural primitive responsible for the
+gain.  We additionally provide a per-mode SVD projection that realizes the $\sigma$-Lipschitz
+bound exactly, an OOD lag-shift evaluation (kernel parameters outside the training range), and
+report the \emph{negative} result that strict (linear-convolution) causal lag-equivariance is
+non-trivial to achieve under cyclic FFT and is left for future work.
 \end{abstract}
 
 \section{Introduction}
@@ -36,6 +75,10 @@ future trajectories.
 \section{Operator Learning and Fourier Neural Operators}
 \input{sections/fno_background}
 
+\section{Theory}
+\label{sec:theory}
+\input{sections/theory}
+
 \section{Benchmarks: Families of DDEs}
 \input{sections/benchmarks}
 
@@ -44,6 +87,9 @@ future trajectories.
 
 \section{Baseline FNO Experiments}
 \input{sections/experiments}
+
+\section{Conclusion}
+\input{sections/conclusion}
 
 \bibliographystyle{plainnat}
 \bibliography{references}

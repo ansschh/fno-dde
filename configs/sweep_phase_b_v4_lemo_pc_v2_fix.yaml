@@ -1,0 +1,57 @@
+sweep_name: phase_b_lemo_pc_v2_fix
+families:
+  main:
+  - dist_exp
+  - vdp
+  - hutch
+  - mackey_glass
+  - predator_prey
+  appendix:
+  - dist_uniform
+  - linear2
+seeds:
+- 42
+- 123
+- 456
+splits:
+- id
+- lag_shift
+split_applicability:
+  dist_exp:        [id]
+  dist_uniform:    [id]
+  hutch:           [id, lag_shift]
+  linear2:         [id, lag_shift]
+  mackey_glass:    [id]
+  predator_prey:   [id]
+  vdp:             [id]
+split_data_dir:
+  id: ''
+  lag_shift: data_ood_delay
+model_configs:
+  lemo_pc_v2:
+    model_class: lemo_pc_v2
+    width: 48
+    n_layers: 3
+    modes: 16
+    film_hidden: 64
+    params_dim: 5
+    sigma: null
+  lemo_pc_v2_sigma_09:
+    model_class: lemo_pc_v2
+    width: 48
+    n_layers: 3
+    modes: 16
+    film_hidden: 64
+    params_dim: 5
+    sigma: 0.9
+training:
+  batch_size: 32
+  epochs: 200
+  grad_clip: 1.0
+  lr: 0.001
+  lr_min: 1.0e-06
+  patience: 30
+  save_every: 50
+  scheduler: cosine
+  weight_decay: 0.001
+training_overrides: {}

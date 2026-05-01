@@ -27,6 +27,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datasets.sharded_dataset import ShardedDDEDataset, create_sharded_dataloaders
 from models import FNO1d, FNO1dResidual, create_fno1d, count_parameters
+from models.shift_augmentation import apply_cyclic_shift
+from train.build_model import build_model
 from utils.config import load_config
 
 
@@ -179,15 +181,29 @@ class ShardedTrainer:
             if isinstance(sampler, DistributedSampler):
                 sampler.set_epoch(epoch)
 
+        shift_aug_p = float(self.config.get('shift_aug_p', 0.0))
+        shift_aug_m = self.config.get('shift_aug_m', None)
+
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch}", leave=False,
                     disable=not self.is_main)
         for batch in pbar:
-            inputs = batch['input'].to(self.device)
-            targets = batch['target'].to(self.device)
-            mask = batch['loss_mask'].to(self.device)
-            
+            # Move to device (apply_cyclic_shift wants everything on same device).
+            batch_gpu = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                         for k, v in batch.items()}
+            # Optional MLP+Aug(m) cyclic-shift augmentation. Configured by
+            # `shift_aug_p` (prob) + `shift_aug_m` (number of discrete shift
+            # points; None = full group). Acts on input+target+loss_mask in
+            # lock-step, so the target remains consistent with the input.
+            if shift_aug_p > 0:
+                batch_gpu = apply_cyclic_shift(
+                    batch_gpu, shift_probability=shift_aug_p, m=shift_aug_m,
+                )
+            inputs = batch_gpu['input']
+            targets = batch_gpu['target']
+            mask = batch_gpu['loss_mask']
+
             self.optimizer.zero_grad()
-            
+
             outputs = self.model(inputs)
             loss = masked_mse_loss(outputs, targets, mask)
             
@@ -523,13 +539,9 @@ def main():
         print(f"Input: ({seq_length}, {in_channels}), Output: ({seq_length}, {out_channels})")
         print(f"Train samples: ~{len(train_loader) * config.get('batch_size', 32)}")
 
-    # Create model
-    model = create_fno1d(
-        in_channels=in_channels,
-        out_channels=out_channels,
-        config=config.get('model', {}),
-        use_residual=config.get('use_residual', False),
-    )
+    # Create model. Dispatch on config['model_class'] — defaults to 'fno1d'
+    # for backward compat with pre-Phase-B configs.
+    model = build_model(config, in_channels, out_channels, seq_length)
 
     if is_main:
         print(f"Model parameters: {count_parameters(model):,}")
@@ -563,13 +575,8 @@ def main():
     if is_main:
         print("\nEvaluating on test set...")
 
-        # Load best model (unwrapped)
-        eval_model = create_fno1d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            config=config.get('model', {}),
-            use_residual=config.get('use_residual', False),
-        )
+        # Load best model (unwrapped). Same dispatcher as training.
+        eval_model = build_model(config, in_channels, out_channels, seq_length)
         best_checkpoint = torch.load(output_dir / 'best_model.pt', map_location=device, weights_only=False)
         eval_model.load_state_dict(best_checkpoint['model_state_dict'])
         eval_model.to(device)

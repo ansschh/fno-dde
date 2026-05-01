@@ -174,16 +174,23 @@ const DIST_UNIFORM_SPEC = FamilySpec(
 
 # ============================================================================
 # Family 7: Distributed delay - exponential kernel
-# x'(t) = r*x(t)*(1 - z(t)/K)
+# x'(t) = r*x(t)*(1 - g*z(t)/K)         (g = coupling gain, see Python source of truth)
 # z(t) = (1/C) ∫_{t-τ}^t exp(-λ(t-s)) x(s) ds
 # where C = (1 - exp(-λτ))/λ (normalization)
 # Auxiliary: z'(t) = -λ*z + (x - exp(-λτ)*x(t-τ))/C
+#
+# IMPORTANT: this Julia implementation must match the Python definition in
+# src/dde/families.py::DistributedDelayDDE_Exp.  Round 2.20 audit fix:
+# (1) added the `g` coupling-gain parameter present in Python but missing here;
+# (2) widened param ranges to match Python (and the actual frozen baseline
+#     dataset which was generated from the Python solver — see
+#     data_baseline_v2/dist_exp/manifest.json: param_names includes "g").
 # ============================================================================
 function rhs_dist_exp!(du, u, h, p, t)
     x, z = u[1], u[2]
     x_τ = h(p, t - p.τ)[1]
     C = (1.0 - exp(-p.λ * p.τ)) / p.λ
-    du[1] = p.r * x * (1.0 - z / p.K)
+    du[1] = p.r * x * (1.0 - p.g * z / p.K)
     du[2] = -p.λ * z + (x - exp(-p.λ * p.τ) * x_τ) / C
 end
 
@@ -192,8 +199,9 @@ const DIST_EXP_SPEC = FamilySpec(
     rhs_dist_exp!,
     2,
     1,
-    [:r, :K, :τ, :λ],
-    Dict(:r => (0.5, 2.5), :K => (0.5, 2.0), :τ => (0.1, 2.0), :λ => (0.5, 5.0)),
+    [:r, :K, :λ, :τ, :g],
+    Dict(:r => (3.0, 10.0), :K => (0.5, 2.0), :λ => (0.3, 4.0),
+         :τ => (0.3, 2.0), :g => (1.0, 2.0)),
     [:τ],
     true,
     100.0

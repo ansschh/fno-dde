@@ -895,6 +895,94 @@ class StiffVdPDDE(DDEFamily):
         return np.stack([x_hist, v_hist], axis=-1)
 
 
+class ExpansiveLinearDDE(DDEFamily):
+    """
+    Phase A target T2: expansive linear DDE.
+
+        x'(t) = a*x(t) + b*x(t-τ)
+
+    with `a, b` chosen so the characteristic equation has a positive-real-
+    part root, so the solution grows (modulo small-amplitude linear
+    regime) — the adversarial target for rollout stability per plan §3.
+    Used to demonstrate that `LEMO_σ` stays bounded while unconstrained
+    LEMO blows up.
+    """
+
+    def __init__(self):
+        config = DDEConfig(
+            name="expansive_linear",
+            tau_max=1.0,
+            T=8.0,
+            n_grid=256,
+            state_dim=1,
+            param_names=["a", "b", "tau"],
+            param_ranges={
+                "a": (0.2, 0.6),   # positive damping → growing baseline
+                "b": (0.3, 0.7),   # positive feedback → growth
+                "tau": (0.1, 1.0),
+            },
+            requires_positive=False,
+        )
+        super().__init__(config)
+
+    def rhs(self, t: float, x: np.ndarray, x_delayed: Dict[str, np.ndarray],
+            params: Dict[str, float]) -> np.ndarray:
+        a, b = params["a"], params["b"]
+        x_tau = x_delayed["tau"][0]
+        return np.array([a * x[0] + b * x_tau])
+
+    def get_delays(self, params: Dict[str, float]) -> List[float]:
+        return [params["tau"]]
+
+
+class ContractiveTanhDDE(DDEFamily):
+    """
+    Phase A target T3: contractive tanh DDE.
+
+        x'(t) = -x(t) + α tanh(β x(t-τ))
+
+    With `α β < 1` the map is globally contractive — the non-adversarial
+    target for rollout stability per plan §3. Used to show that the
+    stable subclass has not paid accuracy for dramatically different
+    targets (only for adversarial ones).
+    """
+
+    def __init__(self):
+        config = DDEConfig(
+            name="contractive_tanh",
+            tau_max=1.0,
+            T=10.0,
+            n_grid=256,
+            state_dim=1,
+            param_names=["alpha", "beta", "tau"],
+            param_ranges={
+                "alpha": (0.3, 0.9),
+                "beta":  (0.3, 1.0),
+                "tau":   (0.1, 1.0),
+            },
+            requires_positive=False,
+        )
+        super().__init__(config)
+
+    def sample_params(self, rng: np.random.Generator) -> Dict[str, float]:
+        """Reject samples with α·β ≥ 1 to preserve contractivity."""
+        while True:
+            alpha = rng.uniform(0.3, 0.9)
+            beta = rng.uniform(0.3, 1.0)
+            if alpha * beta < 0.95:   # contraction margin
+                tau = rng.uniform(0.1, 1.0)
+                return {"alpha": alpha, "beta": beta, "tau": tau}
+
+    def rhs(self, t: float, x: np.ndarray, x_delayed: Dict[str, np.ndarray],
+            params: Dict[str, float]) -> np.ndarray:
+        alpha, beta = params["alpha"], params["beta"]
+        x_tau = x_delayed["tau"][0]
+        return np.array([-x[0] + alpha * np.tanh(beta * x_tau)])
+
+    def get_delays(self, params: Dict[str, float]) -> List[float]:
+        return [params["tau"]]
+
+
 # Registry of all DDE families
 DDE_FAMILIES = {
     "linear2": Linear2DDE,
@@ -909,6 +997,8 @@ DDE_FAMILIES = {
     "forced_duffing": ForcedDelayDuffing,
     "multi_delay_comb": MultiDelayComb,
     "stiff_vdp": StiffVdPDDE,
+    "expansive_linear": ExpansiveLinearDDE,
+    "contractive_tanh": ContractiveTanhDDE,
 }
 
 

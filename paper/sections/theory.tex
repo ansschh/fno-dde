@@ -1,0 +1,464 @@
+% Theory --- formalization spine.
+% Every theorem and corollary here has a corresponding entry in
+% notes/formalization_status.csv and notes/theorem_cards/T*.md.
+% Proofs are written to match the Lean targets listed alongside each
+% statement (via \leanref{...}), even when the Lean file is still in
+% progress; the `status` field in the CSV tracks which are machine-checked.
+
+In this section we collect the theoretical results that motivate
+and justify the LEMO architecture.  The development is in three
+parts.  First, on the discrete cyclic group $C_n$, we establish the
+equivariance spine of the architecture and derive the finite-group
+out-of-distribution (OOD) gap that motivates shift-augmentation.
+Second, we introduce the spectrally-normalized subclass $\mathrm{LEMO}_\sigma$
+and prove an architectural contraction bound that certifies rollout
+stability.  Third, we extend the equivariance story to the continuous
+circle $S^1$, where no finite augmentation can match the equivariant
+learner.
+
+\subsection{Setup: the cyclic shift action and the lag convolution}
+
+Throughout this section, fix an integer $n \ge 1$ and work over the
+cyclic group $C_n = \mathbb{Z}/n\mathbb{Z}$.
+
+\begin{definition}[History space and shift action]
+\label{def:shift}
+The \emph{history space} is $\mathcal{X}_n := \{h : C_n \to \mathbb{R}\}$.
+For each $r \in C_n$, the \emph{cyclic shift} $\mathrm{sh}_r : \mathcal{X}_n \to \mathcal{X}_n$
+is defined by $(\mathrm{sh}_r h)(j) := h(j - r)$.
+\end{definition}
+
+\begin{theorem}[Shift action]
+\label{thm:shift-action}
+The family $\{\mathrm{sh}_r\}_{r \in C_n}$ is a group action of $C_n$ on
+$\mathcal{X}_n$: $\mathrm{sh}_0 = \mathrm{id}$ and $\mathrm{sh}_{r+s} = \mathrm{sh}_r \circ \mathrm{sh}_s$ for all
+$r, s \in C_n$.
+\end{theorem}
+
+\begin{proof}
+Direct: $(\mathrm{sh}_0 h)(j) = h(j - 0) = h(j)$, and
+$(\mathrm{sh}_{r+s} h)(j) = h(j - r - s) = (\mathrm{sh}_r (\mathrm{sh}_s h))(j)$ by
+associativity of subtraction in $C_n$.
+\leanref{LEMO/DiscreteCore.lean}{shift\_is\_action}
+\end{proof}
+
+\begin{definition}[Lag convolution]
+\label{def:lagconv}
+For a kernel $K : C_n \to \mathbb{R}$, the \emph{cyclic lag-convolution
+operator} $\mathrm{L}_K : \mathcal{X}_n \to \mathcal{X}_n$ is
+\[
+  (\mathrm{L}_K h)(j) := \sum_{k \in C_n} K(k) \cdot h(j - k).
+\]
+\end{definition}
+
+\begin{theorem}[Lag-convolution equivariance]
+\label{thm:layer-equiv}
+For every kernel $K : C_n \to \mathbb{R}$ and every $r \in C_n$,
+\[
+  \mathrm{L}_K \circ \mathrm{sh}_r \;=\; \mathrm{sh}_r \circ \mathrm{L}_K.
+\]
+\end{theorem}
+
+\begin{proof}
+For any $h \in \mathcal{X}_n$ and $j \in C_n$,
+\[
+  (\mathrm{L}_K (\mathrm{sh}_r h))(j)
+  = \sum_{k} K(k) \cdot h(j - r - k)
+  = \sum_{k} K(k) \cdot h((j - r) - k)
+  = (\mathrm{L}_K h)(j - r)
+  = (\mathrm{sh}_r (\mathrm{L}_K h))(j).
+\]
+The middle equality is associativity of subtraction in $C_n$.
+\leanref{LEMO/DiscreteCore.lean}{lagConv\_shift}
+\end{proof}
+
+\begin{theorem}[Stack equivariance]
+\label{thm:stack-equiv}
+Let $f_1, \dots, f_L : \mathcal{X}_n \to \mathcal{X}_n$ be shift-equivariant
+maps, i.e., $f_i \circ \mathrm{sh}_r = \mathrm{sh}_r \circ f_i$ for every $i$ and every
+$r \in C_n$.  Then their composition $f_L \circ \cdots \circ f_1$ is
+shift-equivariant.
+\end{theorem}
+
+\begin{proof}
+Induction on $L$.  The base case $L = 1$ is the hypothesis.  For the
+step, $(f_{L+1} \circ f_L \circ \cdots \circ f_1) \circ \mathrm{sh}_r =
+f_{L+1} \circ (f_L \circ \cdots \circ f_1 \circ \mathrm{sh}_r) =
+f_{L+1} \circ \mathrm{sh}_r \circ (f_L \circ \cdots \circ f_1) =
+\mathrm{sh}_r \circ f_{L+1} \circ \cdots \circ f_1$.
+\leanref{LEMO/DiscreteCore.lean}{stack\_equivariant}
+\end{proof}
+
+\begin{theorem}[Softmax equivariance]
+\label{thm:softmax-equiv}
+For every temperature $\tau > 0$, the normalized softmax along the lag
+axis,
+\[
+  (\mathrm{softmax}_\tau h)(j) := \frac{\exp(h(j)/\tau)}{\sum_{k \in C_n} \exp(h(k)/\tau)},
+\]
+commutes with every cyclic shift: $\mathrm{softmax}_\tau \circ \mathrm{sh}_r = \mathrm{sh}_r \circ \mathrm{softmax}_\tau$.
+\end{theorem}
+
+\begin{proof}
+The denominator $Z(h) := \sum_k \exp(h(k)/\tau)$ is shift-invariant:
+$Z(\mathrm{sh}_r h) = \sum_k \exp(h(k-r)/\tau) = \sum_{k'} \exp(h(k')/\tau) = Z(h)$
+by reindexing $k' = k - r$ (which is a bijection on $C_n$).  Hence
+$(\mathrm{softmax}_\tau (\mathrm{sh}_r h))(j) = \exp(h(j-r)/\tau)/Z(h) =
+(\mathrm{softmax}_\tau h)(j - r) = (\mathrm{sh}_r (\mathrm{softmax}_\tau h))(j)$.
+\leanref{LEMO/DiscreteCore.lean}{softmax\_shift}
+\end{proof}
+
+\begin{theorem}[Pooled invariance]
+\label{thm:pooled-inv}
+The sum-pool $\mathrm{sumpool}(h) := \sum_{j \in C_n} h(j)$ is
+shift-invariant: $\mathrm{sumpool}(\mathrm{sh}_r h) = \mathrm{sumpool}(h)$
+for every $r \in C_n$.  The same holds for mean-pool,
+$\mathrm{logsumexp}$, and any symmetric function of the lag axis.
+\end{theorem}
+
+\begin{proof}
+$\mathrm{sumpool}(\mathrm{sh}_r h) = \sum_j h(j-r) = \sum_{j'} h(j') = \mathrm{sumpool}(h)$
+by the reindexing $j' = j - r$.
+\leanref{LEMO/Pooling.lean}{sumpool\_invariant}
+\end{proof}
+
+\begin{lemma}[Orbit constancy]
+\label{lem:orbit-constancy}
+Let $f : \mathcal{X}_n \to \mathcal{X}_n$ be shift-equivariant and let $\mathcal{L} :
+\mathcal{X}_n \times \mathcal{X}_n \to \mathbb{R}_{\ge 0}$ be shift-invariant (i.e.,
+$\mathcal{L}(\mathrm{sh}_r y, \mathrm{sh}_r y') = \mathcal{L}(y, y')$ for every $r$).
+Then for every $h, h' \in \mathcal{X}_n$ and every $r \in C_n$,
+\[
+  \mathcal{L}\bigl(f(\mathrm{sh}_r h), f(\mathrm{sh}_r h')\bigr)
+  \;=\; \mathcal{L}\bigl(f(h), f(h')\bigr).
+\]
+In particular, for any fixed equivariant target $f^\star$, the
+function $h \mapsto \mathcal{L}(f(h), f^\star(h))$ is constant on
+$C_n$-orbits.
+\end{lemma}
+
+\begin{proof}
+Substitute equivariance of $f$ and invariance of $\mathcal{L}$:
+$\mathcal{L}(f(\mathrm{sh}_r h), f(\mathrm{sh}_r h')) =
+\mathcal{L}(\mathrm{sh}_r f(h), \mathrm{sh}_r f(h')) = \mathcal{L}(f(h), f(h'))$.
+\leanref{LEMO/Pooling.lean}{orbit\_constant}
+\end{proof}
+
+\subsection{Finite-group OOD gap}
+
+Let $X$ be a finite set on which $C_n$ acts freely, so that $|X| = n k$
+where $k$ is the number of orbits.  Fix a \emph{fundamental domain}
+$D_0 \subset X$ containing exactly one element of each orbit; let
+$\mu_\mathrm{fund}$ be the uniform measure on $D_0$ and $\mu_\mathrm{uni}$
+the uniform measure on $X$ (equivalently, the orbit-average of
+$\mu_\mathrm{fund}$).  Let $Y = \{0, 1\}$ and consider the $0/1$ loss
+$\ell(y, y') := \mathbf{1}[y \ne y']$.
+
+\begin{theorem}[Finite-group OOD gap]
+\label{thm:oodgap}
+Let $f^\star : X \to Y$ be shift-invariant.
+\begin{enumerate}
+  \item[(i)] For every shift-invariant hypothesis $\hat{f} : X \to Y$,
+  $\mathbb{E}_{\mu_\mathrm{fund}}[\ell(\hat{f}, f^\star)] =
+  \mathbb{E}_{\mu_\mathrm{uni}}[\ell(\hat{f}, f^\star)]$.
+  \item[(ii)] There exists a (non-invariant) hypothesis
+  $\hat{f} : X \to Y$ with zero fundamental-domain risk but full-orbit
+  risk exactly $(n-1)/n$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+\textbf{(i)}~By Lemma~\ref{lem:orbit-constancy}, $x \mapsto \ell(\hat{f}(x),
+f^\star(x))$ is constant on $C_n$-orbits.  The orbit-average of a
+function that is constant on orbits equals its value on any orbit
+representative; averaging over $D_0$ gives the same value as averaging
+over the full orbit-average $\mu_\mathrm{uni}$.
+
+\textbf{(ii)}~Define $\hat{f}(x) := f^\star(x)$ if $x \in D_0$ and
+$\hat{f}(x) := 1 - f^\star(x)$ otherwise.  Then $\hat{f}$ has zero
+fundamental-domain risk; on any orbit, $\hat{f}$ disagrees with $f^\star$
+at $n - 1$ of the $n$ points, so the full-orbit risk is exactly
+$(n-1)/n$.
+\leanref{LEMO/OODGap.lean}{finite\_group\_ood\_gap}
+\end{proof}
+
+\begin{corollary}[PAC sample-complexity separation]
+\label{cor:pac-gap}
+In the setting of Theorem~\ref{thm:oodgap}, let $\mathcal{F}_G$ be the
+class of shift-invariant functions $X \to Y$ (with
+$|\mathcal{F}_G| = 2^k$) and $\mathcal{F} = Y^X$ the full class (with
+$|\mathcal{F}| = 2^{nk}$).  To learn a target in $\mathcal{F}_G$ under
+$\mu_\mathrm{uni}$ to excess $0/1$ risk $\varepsilon$ with probability
+$1 - \delta$, empirical risk minimization needs
+\[
+  m_\mathrm{eq} \;=\; \Theta\!\left(\frac{k \log(1/\varepsilon) + \log(1/\delta)}{\varepsilon}\right),
+  \qquad
+  m_\mathrm{non} \;=\; \Theta\!\left(\frac{nk \log(1/\varepsilon) + \log(1/\delta)}{\varepsilon}\right),
+\]
+respectively, so the ratio $m_\mathrm{non}/m_\mathrm{eq} = \Theta(n)$ for
+the leading term.
+\end{corollary}
+
+\begin{proof}
+Upper bounds are the standard finite-hypothesis-class PAC bounds for
+$\mathcal{F}_G$ and $\mathcal{F}$.  The matching lower bound follows
+from the construction of Theorem~\ref{thm:oodgap}(ii): there is a
+subfamily of $\mathcal{F}$ of size $2^{(n-1)k}$ that is perfectly
+distinguishable on $\mu_\mathrm{uni}$ but indistinguishable on the
+fundamental-domain marginal, so sample-efficient learning on
+$\mu_\mathrm{uni}$ from fundamental-domain-only data is impossible
+without the invariance prior.  The construction follows
+Mei--Misiakiewicz--Montanari (2021) and Elesedy--Zaidi (2021).
+\leanref{LEMO/OODGap.lean}{pac\_sample\_complexity}
+\end{proof}
+
+\subsection{Operator-norm control}
+
+We now turn to the ingredients for rollout stability.  All three
+lemmas below are standard; we collect them because they combine into
+the architectural contraction bound of
+Corollary~\ref{cor:architectural-contraction}.
+
+\begin{lemma}[FFT norm bound]
+\label{lem:fft-norm}
+For $K : C_n \to \mathbb{R}$, let $\hat{K} : C_n \to \mathbb{C}$,
+$\hat{K}(\omega) := \sum_{k \in C_n} K(k) \exp(-2\pi i k \omega / n)$ be
+its discrete Fourier transform.  Viewing $\mathrm{L}_K$ as an operator on
+$\ell^2(C_n)$, its Euclidean operator norm is
+\[
+  \|\mathrm{L}_K\|_\mathrm{op}
+  \;=\; \max_{\omega \in C_n} |\hat{K}(\omega)|.
+\]
+\end{lemma}
+
+\begin{proof}
+The DFT is unitary on $\ell^2(C_n)$.  Under the DFT basis, $\mathrm{L}_K$ is
+the diagonal operator with entries $\hat{K}(\omega)$.  The operator
+norm of a diagonal operator is the maximum magnitude of its diagonal.
+\leanref{LEMO/FFTNorm.lean}{fft\_op\_norm}
+\end{proof}
+
+\begin{lemma}[Pointwise 1-Lipschitz operator bound]
+\label{lem:pointwise-norm}
+Let $\sigma : \mathbb{R} \to \mathbb{R}$ be $1$-Lipschitz.  Extend
+$\sigma$ pointwise to $\mathcal{X}_n^d := (\mathbb{R}^d)^n$.  Then for every
+$H, H' \in \mathcal{X}_n^d$,
+\[
+  \|\sigma(H) - \sigma(H')\|_2 \;\le\; \|H - H'\|_2.
+\]
+\end{lemma}
+
+\begin{proof}
+$\|\sigma(H) - \sigma(H')\|_2^2 = \sum_{j, c} |\sigma(H_{j,c}) - \sigma(H'_{j,c})|^2
+\le \sum_{j, c} |H_{j,c} - H'_{j,c}|^2 = \|H - H'\|_2^2$ by
+$1$-Lipschitzness at each coordinate.
+\leanref{LEMO/FFTNorm.lean}{pointwise\_op\_norm}
+\end{proof}
+
+\begin{lemma}[Composition Lipschitz]
+\label{lem:composition-lip}
+If $f : M \to N$ is $L_1$-Lipschitz and $g : N \to P$ is $L_2$-Lipschitz
+between metric spaces, then $g \circ f : M \to P$ is
+$(L_1 L_2)$-Lipschitz.
+\end{lemma}
+
+\begin{proof}
+$d_P(g(f(x)), g(f(y))) \le L_2 \cdot d_N(f(x), f(y)) \le L_2 L_1 \cdot d_M(x, y)$.
+\leanref{LEMO/FFTNorm.lean}{composition\_lipschitz}
+\end{proof}
+
+\subsection{The $\mathrm{LEMO}_\sigma$ subclass: architectural contraction}
+
+\begin{definition}[$\mathrm{LEMO}$ predictor and the $\mathrm{LEMO}_\sigma$ subclass]
+\label{def:lemo-sigma}
+A \emph{$\mathrm{LEMO}$ predictor} is a map $\Phi : (\mathbb{R}^d)^n \to \mathbb{R}^d$
+of the form $\Phi = \pi \circ \sigma_L \circ W_L \circ \cdots \circ
+\sigma_1 \circ W_1$, where each $W_\ell$ is a lag-convolution layer
+(Definition~\ref{def:lagconv}), each $\sigma_\ell$ is a pointwise
+$1$-Lipschitz nonlinearity, and $\pi$ is a shift-equivariant readout.
+For $\sigma \in (0, 1)$, the subclass $\mathrm{LEMO}_\sigma$ consists of
+all $\mathrm{LEMO}$ predictors in which every $W_\ell$ and $\pi$ has Euclidean
+operator norm at most $\sigma$.
+\end{definition}
+
+In practice, the per-layer constraint $\|W_\ell\|_\mathrm{op} \le \sigma$
+for convolutional layers is enforced by dividing each Fourier coefficient
+$\hat{W_\ell}(\omega)$ by $\max(1, \max_\omega |\hat{W_\ell}(\omega)|/\sigma)$
+at every forward pass (cf.~Lemma~\ref{lem:fft-norm}).  Importantly,
+this is \emph{not} what
+\texttt{torch.nn.utils.spectral\_norm(nn.Conv1d)} computes; that
+wrapper bounds a reshaped-weight SVD and is typically looser (and sometimes
+arbitrarily loose) than the convolutional operator norm.  The FFT-based
+normalization is implemented in \texttt{src/models/lemo.py}.
+
+\begin{corollary}[Architectural contraction]
+\label{cor:architectural-contraction}
+Every $\Phi \in \mathrm{LEMO}_\sigma$ is $\sigma^{L+1}$-Lipschitz in the
+Euclidean norm:
+\[
+  \|\Phi(H) - \Phi(H')\|_2 \;\le\; \sigma^{L+1} \cdot \|H - H'\|_2
+  \qquad \forall\, H, H' \in (\mathbb{R}^d)^n.
+\]
+\end{corollary}
+
+\begin{proof}
+By Lemma~\ref{lem:fft-norm} each $W_\ell$ is $\sigma$-Lipschitz in the
+Euclidean norm, and the readout $\pi$ is $\sigma$-Lipschitz by the same
+argument (or by direct construction).  Each $\sigma_\ell$ is
+$1$-Lipschitz by Lemma~\ref{lem:pointwise-norm}.  The composition is
+$(\sigma \cdot 1)^L \cdot \sigma = \sigma^{L+1}$-Lipschitz by
+Lemma~\ref{lem:composition-lip} applied $2L + 1$ times.
+\leanref{LEMO/Contraction.lean}{lemo\_sigma\_contract}
+\end{proof}
+
+\begin{corollary}[Rollout perturbation]
+\label{cor:rollout}
+Let $\Phi \in \mathrm{LEMO}_\sigma$ with depth $L$ and history length $n$,
+and let $U_\Phi$ be the associated history-update map.  There exists
+$\beta > 1$ (specifically $\beta = \sigma^{-(L+1)/n}$) such that $U_\Phi$
+is $\rho$-contractive in the weighted norm
+$|H|_\beta := \max_j \beta^{-j} |H_j|$ with rate
+$\rho = \sigma^{(L+1)/n} < 1$.  Consequently, if the one-step prediction
+error satisfies $|\hat{\Phi}(H_t) - \Phi(H_t)|_\beta \le \varepsilon$ for
+all $t$, then the rollout error is bounded by
+\[
+  |H_t - \hat{H}_t|_\beta
+  \;\le\; \frac{1 - \rho^t}{1 - \rho} \cdot \varepsilon
+  \;\le\; \frac{\varepsilon}{1 - \rho}
+  \qquad \forall\, t \ge 0.
+\]
+\end{corollary}
+
+\begin{proof}
+By Corollary~\ref{cor:architectural-contraction}, $\Phi$ is
+$\sigma^{L+1}$-Lipschitz in the Euclidean norm.  A standard
+comparability estimate between the Euclidean and weighted norms on
+$(\mathbb{R}^d)^n$ gives $\|\cdot\|_2$--$|\cdot|_\beta$ bi-Lipschitz
+constants that absorb the $\beta^{n-1}$ factor when $\beta$ is chosen
+as in the statement; substituting into the Euclidean Lipschitz bound
+yields $\rho = \sigma^{(L+1)/n}$.  The rollout bound then follows
+by induction: if $E_t := |H_t - \hat{H}_t|_\beta$ satisfies
+$E_{t+1} \le \rho E_t + \varepsilon$, then
+$E_t \le (1 - \rho^t)/(1 - \rho) \cdot \varepsilon$.
+\leanref{LEMO/Contraction.lean}{rollout\_bound}
+\end{proof}
+
+\subsection{Continuous-lag extension}
+\label{sec:continuous-lag}
+
+The discrete theory above uses shifts in $C_n$.  In many applications
+(including DDEs) the lag is a continuous quantity $\tau \in [0, L]$.
+Finite augmentation over discrete shifts cannot fill the continuum,
+so the OOD story sharpens considerably.  Throughout this subsection
+let $\mathcal{X} := L^\infty(S^1; \mathbb{R})$ with $S^1 = \mathbb{R}/L\mathbb{Z}$ and let
+$\mathrm{sh}_s : \mathcal{X} \to \mathcal{X}$, $(\mathrm{sh}_s h)(\tau) := h((\tau - s) \bmod L)$, be
+the continuous shift action.
+
+\begin{definition}[Continuous lag-convolution operator]
+\label{def:continuous-lagconv}
+For $K \in L^1(S^1)$ the continuous lag-convolution
+$\mathrm{L}_K : \mathcal{X} \to \mathcal{X}$ is
+\[
+  (\mathrm{L}_K h)(\tau) := \int_0^L K\bigl((\tau - s) \bmod L\bigr) \cdot h(s)\,ds.
+\]
+\end{definition}
+
+\begin{theorem}[Continuous-lag equivariance]
+\label{thm:continuous-layer-equiv}
+For every $K \in L^1(S^1)$ and every $s \in S^1$,
+$\mathrm{L}_K \circ \mathrm{sh}_s = \mathrm{sh}_s \circ \mathrm{L}_K$.
+\end{theorem}
+
+\begin{proof}
+Translation-invariance of Lebesgue measure on $S^1$:
+\[
+  (\mathrm{L}_K (\mathrm{sh}_s h))(\tau)
+  = \int K((\tau - u) \bmod L) \cdot h((u - s) \bmod L)\, du
+  = \int K(((\tau - s) - v) \bmod L) \cdot h(v)\, dv
+  = (\mathrm{sh}_s (\mathrm{L}_K h))(\tau),
+\]
+substituting $v = (u - s) \bmod L$.
+\leanref{LEMO/ContinuousQuadrature.lean}{continuous\_lag\_equiv\_discrete}
+\end{proof}
+
+\begin{theorem}[Continuous OOD gap]
+\label{thm:continuous-ood-gap}
+Fix a fundamental-domain measure $\mu_\mathrm{fund} \in \mathcal{P}(D_0)$ for
+some $D_0 \subset \mathcal{X}$ meeting every $S^1$-orbit exactly once, and
+let $\mu_\mathrm{uni}$ be its orbit-average (the pushforward of
+$\mu_\mathrm{fund} \otimes \mathrm{Unif}(S^1)$).  Let $f^\star : \mathcal{X} \to \mathcal{X}$
+be continuous-lag-equivariant.
+\begin{enumerate}
+\item[(i)] For every continuous-lag-equivariant hypothesis $\hat{f}$,
+$\mathbb{E}_{\mu_\mathrm{fund}}[\mathcal{L}(\hat{f}, f^\star)] = \mathbb{E}_{\mu_\mathrm{uni}}[\mathcal{L}(\hat{f}, f^\star)]$.
+\item[(ii)] For binary output and $0/1$ loss, the non-equivariant
+construction of Theorem~\ref{thm:oodgap}(ii) yields a hypothesis
+$\hat{f}$ with zero fundamental-domain risk and full-orbit risk
+$1 - |D_0|/|\mathcal{X}|_\mathrm{uni}$, which tends to $1$ as the group becomes
+continuous.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+\textbf{(i)} By Theorem~\ref{thm:continuous-layer-equiv} the loss
+$h \mapsto \mathcal{L}(\hat{f}(h), f^\star(h))$ is constant on orbits; integrals of
+orbit-constant functions agree under $\mu_\mathrm{fund}$ and its
+orbit-average $\mu_\mathrm{uni}$.
+\textbf{(ii)} Same construction as Theorem~\ref{thm:oodgap}(ii), now
+applied to the continuous orbit structure.
+\leanref{LEMO/ContinuousQuadrature.lean}{continuous\_ood\_gap\_discrete}
+\end{proof}
+
+\begin{theorem}[Augmentation covering-radius lower bound]
+\label{thm:aug-lower-bound}
+Let $A = \{s_1, \dots, s_m\} \subset S^1$ be a finite augmentation
+scheme with covering radius $r(A) := \sup_{s \in S^1} d(s, A)$.  Let
+$\mathcal{F}$ be the class of functions $\mathcal{X} \times S^1 \to \mathbb{R}$ that
+are $C$-Lipschitz in the $\tau$ argument, and suppose $f^\star \in \mathcal{F}$
+is continuous-lag-equivariant and non-degenerate (i.e., its restriction
+to orbits is not constant on the complement of $A$).  Then for every
+learner $\hat{f}$ that uses only training data of the form
+$\{(\mathrm{sh}_{s_i} h, y)\}_{s_i \in A}$,
+\[
+  \sup_{s \in S^1} \mathbb{E}_h \bigl|\hat{f}(h, s) - f^\star(h, s)\bigr|
+  \;\ge\; C' \cdot r(A),
+\]
+for a constant $C' > 0$ depending on $f^\star$ but not on the learner
+or the augmentation scheme.  In particular, matching an equivariant
+learner's error $\varepsilon$ requires $m = \Omega(L/\varepsilon)$
+augmentation points.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+Pick $s^\star \in S^1$ maximizing $d(s^\star, A)$.  Choose two
+histories $h_1, h_2$ whose $f^\star$-images disagree at $s^\star$ but
+agree (to within Lipschitz tolerance) at every $s_i \in A$.  A learner
+whose training is confined to $A$ cannot distinguish $h_1, h_2$ at
+$s^\star$, so it makes an error at least $|f^\star(h_1, s^\star) -
+f^\star(h_2, s^\star)|/2$.  Non-degeneracy bounds this gap below by
+$C' \cdot d(s^\star, A) = C' \cdot r(A)$.  Combining with
+$r(A) \ge L/(2m)$ for an $m$-point scheme gives the quantitative
+$\Omega(L/m)$ lower bound.
+\leanref{LEMO/ContinuousQuadrature.lean}{aug\_covering\_radius\_lower\_bound}
+\end{proof}
+
+\begin{remark}[What the theorems license in the paper's empirical
+claims]\label{rem:license}
+Taken together:
+Theorems~\ref{thm:layer-equiv}--\ref{thm:pooled-inv} and
+Lemma~\ref{lem:orbit-constancy} license the statement that LEMO is
+structurally shift-equivariant/invariant at every layer and at pooled
+readouts.
+Theorem~\ref{thm:oodgap} and Corollary~\ref{cor:pac-gap} license the
+claim that non-equivariant learners pay a $\Theta(n)$ factor in
+sample complexity on shift-symmetric targets, matching our
+plot of risk versus augmentation budget.
+Corollaries~\ref{cor:architectural-contraction} and~\ref{cor:rollout}
+license the claim that $\mathrm{LEMO}_\sigma$ has certified bounded-rollout
+stability, matching the $10^{35}$-versus-$10^{-1}$ rollout gap
+observed in the spectral-norm ablation.
+Theorem~\ref{thm:continuous-layer-equiv}--\ref{thm:aug-lower-bound}
+license the claim that only architectural lag-equivariance transfers
+exactly across unseen continuous $\tau$; any finite augmentation has
+error scaling at least as $\Omega(1/m)$ in the covering radius.
+\end{remark}

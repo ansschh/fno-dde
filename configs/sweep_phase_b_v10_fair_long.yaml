@@ -1,0 +1,106 @@
+# Fair full-budget re-run: all models at patience=200 (no early-stop).
+# Apples-to-apples comparison without the asymmetric early-stop bias of
+# the original phase_b_core_dde_v1 (where LEMO was cut at epoch 30-80
+# while TCN/lemo_sigma_09 ran 150-200 because they didn't trigger
+# patience=30).  Each model gets the full 200-epoch cosine LR schedule.
+sweep_name: phase_b_fair_long
+families:
+  main:
+  - dist_exp
+  - vdp
+  - hutch
+  - mackey_glass
+  - predator_prey
+  appendix:
+  - dist_uniform
+  - linear2
+seeds:
+- 42
+- 123
+- 456
+splits:
+- id
+- lag_shift
+split_applicability:
+  dist_exp:        [id]
+  dist_uniform:    [id]
+  hutch:           [id, lag_shift]
+  linear2:         [id, lag_shift]
+  mackey_glass:    [id]
+  predator_prey:   [id]
+  vdp:             [id]
+split_data_dir:
+  id: ''
+  lag_shift: data_ood_delay
+model_configs:
+  plainmlp:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+  mlp_shiftaug_16:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 16
+  mlp_shiftaug_64:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 64
+  fno1d:
+    model_class: fno1d
+    activation: gelu
+    dropout: 0.1
+    modes: 12
+    n_layers: 3
+    padding: 8
+    width: 48
+  deeponet:
+    model_class: deeponet
+    p: 64
+    branch_hidden: 128
+    trunk_hidden: 128
+    depth: 4
+  memno:
+    model_class: memno
+  lno:
+    model_class: lno
+    width: 48
+    modes: 16
+  mfno:
+    model_class: mfno
+    activation: gelu
+    latent_channels: 32
+    modes: 64
+    num_layers: 5
+    projection_channels: 128
+  tcn:
+    model_class: tcn
+    dropout: 0.1
+    hidden_channels: 64
+    kernel_size: 3
+    n_layers: 4
+  lemo:
+    model_class: lemo
+  lemo_sigma_09:
+    model_class: lemo
+    sigma: 0.9
+training:
+  batch_size: 32
+  epochs: 200
+  grad_clip: 1.0
+  lr: 0.001
+  lr_min: 1.0e-06
+  patience: 200    # full budget for everyone
+  save_every: 50
+  scheduler: cosine
+  weight_decay: 0.001
+training_overrides:
+  mfno:
+    lr: 0.0005
+    weight_decay: 0.003
+  lno:
+    lr: 0.002
+    weight_decay: 0.0001

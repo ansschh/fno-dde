@@ -1,0 +1,21 @@
+family: dist_exp
+model_class: mfno
+batch_size: 32
+epochs: 3
+lr: 5.0e-4
+weight_decay: 3.0e-3
+grad_clip: 1.0
+num_workers: 0
+
+# Paper hyperparameters (Lee-Kim-Park 2025 arxiv 2507.17887, Table 3):
+# latent_channels=32, modes=64, num_layers=5, projection_channels=128,
+# activation=gelu, StepLR(step=100, gamma=0.9), 500 epochs at lr=5e-4,
+# wd=3e-3. Parameter count on in_channels=2 is exactly 664,961; on DDE
+# data with more input channels the count is slightly higher but the
+# architecture matches the paper verbatim.
+model:
+  latent_channels: 32
+  modes: 64
+  num_layers: 5
+  projection_channels: 128
+  activation: gelu

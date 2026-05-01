@@ -1,0 +1,17 @@
+family: dist_exp
+model_class: zfno
+batch_size: 32
+epochs: 3
+lr: 5.0e-4
+weight_decay: 3.0e-3
+grad_clip: 1.0
+num_workers: 0
+
+# Zero-padded FNO ablation (paper's ZFNO variant).
+# Same FNO core as MFNO; differs only in the padding scheme.
+model:
+  latent_channels: 32
+  modes: 64
+  num_layers: 5
+  projection_channels: 128
+  activation: gelu

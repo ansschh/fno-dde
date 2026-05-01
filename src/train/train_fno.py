@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datasets import DDEDataset, create_dataloaders
-from models import FNO1d, FNO1dResidual, create_fno1d, count_parameters
+from models import FNO1d, FNO1dResidual, create_fno1d, count_parameters, create_lemo
 from utils.config import load_config
 from utils.logging import setup_logger
 
@@ -293,15 +293,30 @@ def main():
     
     print(f"Input channels: {in_channels}, Output channels: {out_channels}")
     
-    # Create model
-    model = create_fno1d(
-        in_channels=in_channels,
-        out_channels=out_channels,
-        config=config.get('model', {}),
-        use_residual=config.get('use_residual', False),
-    )
-    
-    print(f"Model parameters: {count_parameters(model):,}")
+    # Create model. Dispatch on config['model_class'] for backward compat
+    # (defaults to 'fno1d'); 'lemo' routes to the LEMO factory with an
+    # optional sigma in config['model']['sigma'] (None = unconstrained).
+    model_class = config.get('model_class', 'fno1d').lower()
+    if model_class == 'lemo':
+        # LEMO needs the length; take it from a sample of the training set
+        length_in = sample['input'].shape[0]
+        model_config = dict(config)
+        model_config.setdefault('model', {})
+        model_config['model'] = {**model_config['model'], 'length': length_in}
+        model = create_lemo(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            config=model_config,
+        )
+    else:
+        model = create_fno1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            config=config.get('model', {}),
+            use_residual=config.get('use_residual', False),
+        )
+
+    print(f"Model class: {model_class}  parameters: {count_parameters(model):,}")
     
     # Create trainer
     trainer = Trainer(

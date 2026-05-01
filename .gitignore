@@ -1,44 +1,43 @@
-# Data files
-data/
-data_*/
-*.npz
-*.h5
-*.hdf5
-
-# Model outputs / checkpoints
+# Data artifacts
+bundles/
+extracted/
 outputs/
+data_dde_pde/*/train/
+data_dde_pde/*/val/
+data_dde_pde/*/test/
+data_dde_pde/*/audit/
+data_dde_pde/_bulk_audit*/
+data_dde_pde/_gifs/
+data_dde_pde/_viz/
+data_apebench/
+data_baseline_*/
+data_medium/
+data_ood_*/
+data_scale/
+data_tiny/
+
+# Checkpoints / results
+*.tar.gz
+*.npz
 *.pt
 *.pth
-*.ckpt
-
-# Reports and figures (regenerated)
-reports/
 slurm_logs/
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
-*.egg-info/
-dist/
-build/
-venv/
+*.pyd
+*.bak
+.pytest_cache/
 .venv/
-*.egg
+venv/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Temp
-*.tmp
-*.bak

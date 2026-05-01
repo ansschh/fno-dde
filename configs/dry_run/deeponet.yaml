@@ -1,0 +1,13 @@
+family: dist_exp
+model_class: deeponet
+batch_size: 32
+epochs: 3
+lr: 0.001
+grad_clip: 1.0
+num_workers: 0
+
+model:
+  p: 64
+  branch_hidden: 128
+  trunk_hidden: 128
+  depth: 4

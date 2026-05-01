@@ -1,0 +1,17 @@
+family: dist_exp
+model_class: lno
+batch_size: 32
+epochs: 3
+lr: 0.002
+weight_decay: 1.0e-4
+grad_clip: 1.0
+num_workers: 0
+
+# Author-faithful LNO from Cao-Goswami-Karniadakis 2024 (vendored from
+# https://github.com/qianyingcao/Laplace-Neural-Operator/1D_Duffing_c0/main.py).
+# Architecture is single Laplace layer + pointwise conv + sin projection head.
+# Paper defaults: width=4, modes=16, lr=2e-3, wd=1e-4, StepLR(step=100, gamma=0.5),
+# 1000 epochs. For a DDE-scale model we bump width to give more capacity.
+model:
+  width: 48
+  modes: 16

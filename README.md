@@ -75,6 +75,65 @@ cd src/dde/solve_julia
 julia --project=. -e "using Pkg; Pkg.instantiate()"
 ```
 
+## Reproducing the Headline Result
+
+**Headline:** *LEMO_PC reduces test relL2 by 69-80% over FNO/MarkovFNO/WindFNO on
+5 distributed-kernel reaction-diffusion benchmarks (n=45 paired cells,
+p<10⁻⁴ Holm-corrected).*
+
+The script `scripts/reproduce_headline.sh` reproduces **one cell** of that claim
+end-to-end (`dist_exp_rd_2d` / clean / seed 42), starting from a fresh clone.
+No Julia or APEBench dependency is needed for this benchmark — the 2D
+reaction-diffusion solver is pure Python + NumPy/Torch.
+
+**1. Install (≈1 min)**
+
+```bash
+pip install -r requirements.txt
+```
+
+**2. Generate data (≈25 min on 1×H100, CPU-bound)**
+
+Generates 1000 train + 200 val + 200 test trajectories on a 64×64 torus,
+written as sharded `.npz` to `data_dde_pde/dist_exp_rd_2d/{train,val,test}/`.
+
+```bash
+bash scripts/reproduce_headline.sh --gen-only
+```
+
+**3. Train + verify (≈90 min on 1×H100)**
+
+Trains LEMO_PC (width=64, lag_modes=24, residual_anchor, 200 epochs) and an
+FNO baseline on the same data, then compares the two `test_rel_l2_mean`
+values against the headline expectation.
+
+```bash
+bash scripts/reproduce_headline.sh
+```
+
+**Expected output**
+
+```
+  LEMO_PC test_rel_l2_mean = 0.0123    (expected ~0.012)
+  FNO      test_rel_l2_mean = 0.0703    (expected ~0.070)
+  Improvement  : 82.5%                  (expected ~80%)
+
+  PASS  -- headline result reproduced within tolerance.
+```
+
+**Total runtime:** ≈2 h on one H100 (≈4 h on A100, ≈8 h on RTX-3090).
+**Hardware:** ≥1 GPU with 12 GB VRAM, ≥30 GB system RAM, ≥6 GB free disk.
+
+The script is idempotent — rerunning skips finished stages. Pass
+`--train-only` to reuse existing data, or `--verify` to only re-check the
+last run's numbers. Outputs land in
+`outputs/reproduce_headline/dist_exp_rd_2d/clean/{lemo_pc_nd,fno_nd}/s42/test_results.json`.
+
+The full headline (n=45 cells across 5 dist-kernel families × 3 regimes ×
+3 seeds) is reproduced by `scripts/followup_sweep.sh phase_a` plus the
+v2 dist-kernel sweep — that takes ≈4 h on 8×H100 and is documented in the
+paper appendix.
+
 ## Quick Start
 
 ### Option A: Full Pipeline (Recommended)

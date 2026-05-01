@@ -1,0 +1,99 @@
+sweep_name: phase_a_theorem_suite_v1
+
+# =============================================================================
+# Phase A — theorem verification suite  (EXPERIMENTATION_PLAN.txt §3, §8)
+#
+# 3 datasets × 8 models × 5 seeds = 120 runs.  Target per-run cost: a few
+# minutes (datasets are small: ~2k/400/400 samples).
+#
+# Verifies the pre-registered hypotheses H1 / H2 / H3 from the plan:
+#   H1: continuous-lag transfer gap (T14 / T16) — plot on T1.
+#   H2: finite-augmentation has irreducible error (T16) — plot on T1.
+#   H3: LEMO_σ rollout stability (T12 / T13) — plots on T2 (adversarial)
+#       and T3 (non-adversarial).
+# =============================================================================
+
+datasets:
+  t1:
+    family: t1_continuous_lag
+    data_dir: data_phase_a
+    description: Continuous-lag toy (synthetic, fixed kernel + continuous τ)
+  t2:
+    family: expansive_linear
+    data_dir: data_phase_a
+    description: Expansive linear DDE (adversarial rollout target)
+  t3:
+    family: contractive_tanh
+    data_dir: data_phase_a
+    description: Contractive tanh DDE (non-adversarial target)
+
+seeds: [42, 123, 456, 789, 2024]
+
+# 8 models per plan §8 Phase A.
+model_configs:
+  plainmlp:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+  mlp_aug_4:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 4
+  mlp_aug_16:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 16
+  mlp_aug_64:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 64
+  mlp_aug_128:
+    model_class: mlp
+    hidden_dim: 256
+    n_layers: 4
+    shift_aug_p: 1.0
+    shift_aug_m: 128
+  lemo:
+    model_class: lemo
+  lemo_sigma_09:
+    model_class: lemo
+    sigma: 0.9
+    activation: relu          # required for exact 1-Lipschitz in LEMO_σ
+  lemo_sigma_099:
+    model_class: lemo
+    sigma: 0.99
+    activation: relu
+
+training:
+  epochs: 100
+  batch_size: 32
+  lr: 1.0e-3
+  lr_min: 1.0e-6
+  weight_decay: 1.0e-3
+  grad_clip: 1.0
+  scheduler: cosine
+  patience: 20
+  save_every: 50
+
+# Phase A has no OOD splits — everything is tested on the held-out test
+# set (which for T1 already tests continuous-τ OOD since train and test
+# sample from the same continuous distribution and the exact τ values
+# are disjoint by construction).
+splits: [id]
+split_applicability:
+  t1_continuous_lag: [id]
+  expansive_linear:  [id]
+  contractive_tanh:  [id]
+split_data_dir:
+  id: ""
+
+slurm:
+  walltime_generate: "02:00:00"
+  walltime_train: "04:00:00"
+  n_gpus: 1

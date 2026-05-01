@@ -1,0 +1,24 @@
+family: dist_exp
+model_class: anie
+batch_size: 16
+epochs: 2
+lr: 1.0e-3
+grad_clip: 1.0
+num_workers: 0
+
+# Author-faithful ANIE: kernels.model_blocks encoder +
+# Integral_attention_solver_multbatch from vendored IE_source/.
+# Construction mirrors NIE_Attention_Burgers_longT.ipynb:
+#   model_blocks(dim+1, dim_emb=64, n_head=4, n_blocks=3,
+#                n_ff=64, attention_type='galerkin', dropout=0.1).
+# Iterative fixed-point with max_iterations=3 (Burgers used 5-10).
+# Batch size reduced to 16 because the iterative solver is ~3x slower
+# than feed-forward baselines.
+model:
+  dim_emb: 64
+  n_head: 4
+  n_blocks: 3
+  n_ff: 64
+  attention_type: galerkin
+  max_iterations: 3
+  smoothing_factor: 0.5
