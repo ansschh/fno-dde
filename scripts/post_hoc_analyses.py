@@ -149,42 +149,102 @@ def kernel_recovery(model, family: str, device: str) -> dict:
 
 # -------------------- 2. cross-family transfer --------------------
 
+def _read_manifest(data_dir: str, family: str) -> dict:
+    """Returns manifest dict or {} if missing."""
+    p = Path(data_dir) / family / "manifest.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
+
+
+def _fingerprint_family(data_dir: str, family: str) -> dict:
+    """Shape fingerprint that the model's lift / output / params layers
+    depend on.  Two families are transfer-compatible iff their fingerprints
+    are equal."""
+    m = _read_manifest(data_dir, family)
+    return {
+        "spatial_shape":  tuple(m.get("spatial_shape", ())),
+        "spatial_dims":   int(m.get("spatial_dims", -1)),
+        "num_channels":   int(m.get("num_channels", -1)),
+        "n_hist":         int(m.get("n_hist", -1)),
+        "n_out":          int(m.get("n_out", -1)),
+        "params_dim":     int(m.get("params_dim", -1)),
+    }
+
+
 def cross_family_transfer(model, ckpt_family: str, data_dir: str,
                            device: str, n_max_samples: int = 64,
                            residual_anchor: bool = True) -> dict:
-    """Evaluate ckpt on every dist-kernel family's test shard.
+    """Evaluate ckpt on every dist-kernel family's test shard whose data
+    fingerprint matches the source family.  Skips incompatible families
+    (different spatial shape, channel count, n_hist, n_out, params_dim);
+    silently passing mismatched-shape input to the model would either
+    crash with a dim error or — worse — produce silently-wrong predictions
+    when shapes happen to coincide.
 
     `residual_anchor` MUST match the training-time setting of the source
     ckpt — the model was trained on residual-anchored input and will
-    behave incorrectly on raw input.  Default True (matches v2/sigma)."""
+    behave incorrectly on raw input.  Default True (matches v2/sigma).
+
+    Returns dict with rel_l2 per compatible target family + a 'skipped'
+    list documenting incompatible families and the reason.
+    """
     from datasets.apebench_dataset import create_apebench_dataloaders
-    out = {"ckpt_family": ckpt_family, "rel_l2": {}}
+    src_fp = _fingerprint_family(data_dir, ckpt_family)
+    out = {"ckpt_family": ckpt_family, "rel_l2": {}, "skipped": [],
+           "source_fingerprint": src_fp}
     for tgt_fam in FAMS:
         if (Path(data_dir) / tgt_fam / "manifest.json").exists() is False:
+            out["skipped"].append({"family": tgt_fam, "reason": "no manifest"})
+            continue
+        tgt_fp = _fingerprint_family(data_dir, tgt_fam)
+        if tgt_fam != ckpt_family and tgt_fp != src_fp:
+            mismatches = {k: (src_fp[k], tgt_fp[k]) for k in src_fp
+                          if src_fp[k] != tgt_fp[k]}
+            out["skipped"].append({"family": tgt_fam,
+                                    "reason": "fingerprint mismatch",
+                                    "diff": mismatches})
             continue
         try:
             _, _, test_loader = create_apebench_dataloaders(
                 data_dir, tgt_fam, batch_size=8, residual_anchor=residual_anchor, seed=42)
-        except Exception:
+        except Exception as e:
+            out["skipped"].append({"family": tgt_fam,
+                                    "reason": f"loader error: {e}"})
             continue
         model.eval()
         rels = []
         seen = 0
-        with torch.no_grad():
-            for batch in test_loader:
-                if seen >= n_max_samples:
-                    break
-                x = batch["input"].to(device).float()
-                y = batch["target"].to(device).float()
-                mask = batch["loss_mask"].to(device).float()
-                yhat = model(x)
-                n_spatial = y.dim() - 3
-                mask_bc = mask.view(*mask.shape, *((1,) * (n_spatial + 1)))
-                diff_sq = ((yhat - y) ** 2 * mask_bc).sum(dim=tuple(range(1, y.dim())))
-                tgt_sq = (y ** 2 * mask_bc).sum(dim=tuple(range(1, y.dim()))) + 1e-12
-                r = torch.sqrt(diff_sq / tgt_sq).cpu().numpy()
-                rels.extend(r.tolist())
-                seen += y.shape[0]
+        try:
+            with torch.no_grad():
+                for batch in test_loader:
+                    if seen >= n_max_samples:
+                        break
+                    x = batch["input"].to(device).float()
+                    y = batch["target"].to(device).float()
+                    mask = batch["loss_mask"].to(device).float()
+                    # Belt-and-suspenders: confirm input channel count matches
+                    # what the model expects (model.lift.in_features for LEMO).
+                    expected_in = getattr(getattr(model, "lift", None),
+                                            "in_features", None)
+                    if expected_in is not None and x.shape[-1] != expected_in:
+                        raise ValueError(
+                            f"input channels {x.shape[-1]} != model.lift.in_features {expected_in}")
+                    yhat = model(x)
+                    n_spatial = y.dim() - 3
+                    mask_bc = mask.view(*mask.shape, *((1,) * (n_spatial + 1)))
+                    diff_sq = ((yhat - y) ** 2 * mask_bc).sum(dim=tuple(range(1, y.dim())))
+                    tgt_sq = (y ** 2 * mask_bc).sum(dim=tuple(range(1, y.dim()))) + 1e-12
+                    r = torch.sqrt(diff_sq / tgt_sq).cpu().numpy()
+                    rels.extend(r.tolist())
+                    seen += y.shape[0]
+        except Exception as e:
+            out["skipped"].append({"family": tgt_fam,
+                                    "reason": f"forward error: {e}"})
+            continue
         if rels:
             out["rel_l2"][tgt_fam] = float(np.mean(rels))
     return out
