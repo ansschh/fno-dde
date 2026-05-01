@@ -77,23 +77,29 @@ def compute_acf(traj, K: int = 32):
 
 def compute_R2_markov_vs_full(traj, K_hist: int = 16, test_frac: float = 0.3,
                                 spatial_summary: str = "mean"):
-    """R^2 of Markov vs full-history LINEAR regression for predicting u(t+1)
-    from u(t) only vs from u(t-K..t).  Uses HOLD-OUT trajectories for the R^2
-    score so that R^2 reflects generalisation, not overfit interpolation.
+    """R^2 of Markov vs full-history LINEAR regression on the INCREMENT
+    Δu(t) = u(t+1) - u(t).  Predicting the value u(t+1) is trivial for
+    smooth dynamics (R^2 ≈ 1 even with one feature) — predicting the
+    increment isolates the part of the dynamics that depends on
+    history beyond the current frame.
 
-    Spatial summary collapses the spatial dim to keep the regression tractable
-    (default: spatial mean per time step).  Without summary, an N=64,
-    T=128 trajectory has 4096 features and 8000 samples — overparameterised
-    and lstsq returns a perfect-fit solution making R^2 ≈ 1 trivially.
+    Markov:  Δu(t) = A · u(t)
+    Full:    Δu(t) = sum_{j=0..K} A_j · u(t-j)
+
+    Train/test split is over trajectories (70/30) so R^2 reflects
+    generalisation, not overfit interpolation.  Spatial summary
+    (default: mean) collapses spatial dim to keep regression tractable.
     """
     N, T = traj.shape[0], traj.shape[1]
     K_hist = min(K_hist, T - 2)
     if spatial_summary == "mean":
-        flat = traj.reshape(N, T, -1).mean(axis=-1, keepdims=True)        # (N, T, 1)
+        flat = traj.reshape(N, T, -1).mean(axis=-1, keepdims=True)
     elif spatial_summary == "raw":
-        flat = traj.reshape(N, T, -1)                                       # (N, T, S*C)
+        flat = traj.reshape(N, T, -1)
     else:
         raise ValueError(spatial_summary)
+    delta = flat[:, 1:] - flat[:, :-1]     # (N, T-1, D)  the increment
+    flat_x = flat[:, :-1]                   # (N, T-1, D)  current value (lined up with delta)
 
     rng = np.random.RandomState(0)
     idx = rng.permutation(N)
@@ -103,29 +109,32 @@ def compute_R2_markov_vs_full(traj, K_hist: int = 16, test_frac: float = 0.3,
     if len(train_idx) < 2:
         return 0.0, 0.0
 
-    train = flat[train_idx]; test = flat[test_idx]
+    train_x = flat_x[train_idx]; test_x = flat_x[test_idx]
+    train_y = delta[train_idx];  test_y = delta[test_idx]
+    Tx = train_x.shape[1]
 
-    # Markov: u(t+1) = A u(t).  Train on train trajectories, score on test.
-    Xtr_m = train[:, :T - 1].reshape(-1, train.shape[-1])
-    Ytr_m = train[:, 1:T].reshape(-1, train.shape[-1])
-    Xte_m = test[:, :T - 1].reshape(-1, test.shape[-1])
-    Yte_m = test[:, 1:T].reshape(-1, test.shape[-1])
+    # Markov: Δu(t) = A u(t).  Single-frame predictor.
+    Xtr_m = train_x.reshape(-1, train_x.shape[-1])
+    Ytr_m = train_y.reshape(-1, train_y.shape[-1])
+    Xte_m = test_x.reshape(-1, test_x.shape[-1])
+    Yte_m = test_y.reshape(-1, test_y.shape[-1])
     Am, *_ = np.linalg.lstsq(Xtr_m, Ytr_m, rcond=None)
     Yte_pred = Xte_m @ Am
     ss_res_m = float(((Yte_pred - Yte_m) ** 2).sum())
     ss_tot_m = float(((Yte_m - Yte_m.mean(axis=0, keepdims=True)) ** 2).sum())
     R2_markov = 1.0 - ss_res_m / max(ss_tot_m, 1e-12)
 
-    if K_hist + 1 <= T - 1:
-        def stack_history(arr):
+    # Full: Δu(t) = sum_{j=0..K} A_j u(t-j).  Stack the K_hist past frames.
+    if K_hist + 1 <= Tx:
+        def stack_history(arr_xt):
             xs = []
             for j in range(K_hist + 1):
-                xs.append(arr[:, K_hist - j: T - 1 - j])
+                xs.append(arr_xt[:, K_hist - j: Tx - j])
             return np.concatenate(xs, axis=-1)
-        Xtr_f_3d = stack_history(train)
-        Ytr_f_3d = train[:, K_hist + 1: T]
-        Xte_f_3d = stack_history(test)
-        Yte_f_3d = test[:, K_hist + 1: T]
+        Xtr_f_3d = stack_history(train_x)
+        Ytr_f_3d = train_y[:, K_hist:]
+        Xte_f_3d = stack_history(test_x)
+        Yte_f_3d = test_y[:, K_hist:]
         Xtr_f = Xtr_f_3d.reshape(-1, Xtr_f_3d.shape[-1])
         Ytr_f = Ytr_f_3d.reshape(-1, Ytr_f_3d.shape[-1])
         Xte_f = Xte_f_3d.reshape(-1, Xte_f_3d.shape[-1])
