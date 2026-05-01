@@ -183,12 +183,16 @@ Per column the two panels are visually indistinguishable; the
 per-shift relative error
 $e_k = \|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
        \|\mathrm{LEMO}(x)\|_2$
-is at most $5.8 \times 10^{-3}$ across all shifts and is independent
-of $k$, consistent with the float32 FFT-precision floor for three
-compounded spectral blocks.  Aggregated across all 45 LEMO-PC cells
-(5 families $\times$ 3 regimes $\times$ 3 seeds), $\max_k \bar{e}_k
-\le 7\!\times\!10^{-3}$.  T1 holds at deployment to numerical
-precision.
+is at most $5.8 \times 10^{-3}$ across all shifts on the
+visualised trajectory, and is independent of $k$, consistent with
+the float32 FFT-precision floor for three compounded spectral
+blocks.  Aggregated across all 45 LEMO-PC cells (5 families $\times$
+3 regimes $\times$ 3 seeds): $\bar{e}_1 = 1.9 \times 10^{-3}$,
+$\bar{e}_4 = 5.6 \times 10^{-3}$, $\bar{e}_{16} = 5.3 \times 10^{-3}$;
+$\max_{\text{cells, } k} e_k = 2.0 \times 10^{-2}$ (median across cells:
+$9.0 \times 10^{-3}$).  All cells pass a $2\%$ T1-precision threshold;
+$33/45$ also pass the tighter $1\%$ bar.  T1 holds at deployment to
+float32 numerical precision.
 
 \begin{figure}[h]
   \centering
