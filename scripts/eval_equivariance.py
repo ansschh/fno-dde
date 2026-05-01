@@ -104,8 +104,9 @@ def main():
         try:
             ckpt = torch.load(c, map_location=device, weights_only=False)
             cfg = ckpt["config"]
+            ra = bool(cfg.get("residual_anchor", True))
             _, _, test_loader = create_apebench_dataloaders(
-                args.data_dir, family, batch_size=8, seed=42)
+                args.data_dir, family, batch_size=8, residual_anchor=ra, seed=42)
             sample = next(iter(test_loader))
             in_ch = sample["input"].shape[-1]
             out_ch = sample["target"].shape[-1]

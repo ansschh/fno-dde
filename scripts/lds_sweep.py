@@ -75,37 +75,69 @@ def compute_acf(traj, K: int = 32):
     return acf
 
 
-def compute_R2_markov_vs_full(traj, K_hist: int = 16):
-    N, T = traj.shape[0], traj.shape[1]
-    flat = traj.reshape(N, T, -1)
-    K_hist = min(K_hist, T - 2)
+def compute_R2_markov_vs_full(traj, K_hist: int = 16, test_frac: float = 0.3,
+                                spatial_summary: str = "mean"):
+    """R^2 of Markov vs full-history LINEAR regression for predicting u(t+1)
+    from u(t) only vs from u(t-K..t).  Uses HOLD-OUT trajectories for the R^2
+    score so that R^2 reflects generalisation, not overfit interpolation.
 
-    X_mk = flat[:, :T - 1]
-    Y    = flat[:, 1:T]
-    Xm = X_mk.reshape(-1, X_mk.shape[-1])
-    Ym = Y.reshape(-1, Y.shape[-1])
-    Am, *_ = np.linalg.lstsq(Xm, Ym, rcond=None)
-    Ym_hat = Xm @ Am
-    ss_res_m = float(((Ym_hat - Ym) ** 2).sum())
-    ss_tot = float(((Ym - Ym.mean(axis=0, keepdims=True)) ** 2).sum())
-    R2_markov = 1.0 - ss_res_m / max(ss_tot, 1e-12)
+    Spatial summary collapses the spatial dim to keep the regression tractable
+    (default: spatial mean per time step).  Without summary, an N=64,
+    T=128 trajectory has 4096 features and 8000 samples — overparameterised
+    and lstsq returns a perfect-fit solution making R^2 ≈ 1 trivially.
+    """
+    N, T = traj.shape[0], traj.shape[1]
+    K_hist = min(K_hist, T - 2)
+    if spatial_summary == "mean":
+        flat = traj.reshape(N, T, -1).mean(axis=-1, keepdims=True)        # (N, T, 1)
+    elif spatial_summary == "raw":
+        flat = traj.reshape(N, T, -1)                                       # (N, T, S*C)
+    else:
+        raise ValueError(spatial_summary)
+
+    rng = np.random.RandomState(0)
+    idx = rng.permutation(N)
+    n_test = max(1, int(round(N * test_frac)))
+    test_idx = idx[:n_test]
+    train_idx = idx[n_test:]
+    if len(train_idx) < 2:
+        return 0.0, 0.0
+
+    train = flat[train_idx]; test = flat[test_idx]
+
+    # Markov: u(t+1) = A u(t).  Train on train trajectories, score on test.
+    Xtr_m = train[:, :T - 1].reshape(-1, train.shape[-1])
+    Ytr_m = train[:, 1:T].reshape(-1, train.shape[-1])
+    Xte_m = test[:, :T - 1].reshape(-1, test.shape[-1])
+    Yte_m = test[:, 1:T].reshape(-1, test.shape[-1])
+    Am, *_ = np.linalg.lstsq(Xtr_m, Ytr_m, rcond=None)
+    Yte_pred = Xte_m @ Am
+    ss_res_m = float(((Yte_pred - Yte_m) ** 2).sum())
+    ss_tot_m = float(((Yte_m - Yte_m.mean(axis=0, keepdims=True)) ** 2).sum())
+    R2_markov = 1.0 - ss_res_m / max(ss_tot_m, 1e-12)
 
     if K_hist + 1 <= T - 1:
-        Xs = []
-        for j in range(K_hist + 1):
-            Xs.append(flat[:, K_hist - j: T - 1 - j])
-        Xf = np.concatenate(Xs, axis=-1)
-        Yf = flat[:, K_hist + 1: T]
-        Xf_2d = Xf.reshape(-1, Xf.shape[-1])
-        Yf_2d = Yf.reshape(-1, Yf.shape[-1])
-        Af, *_ = np.linalg.lstsq(Xf_2d, Yf_2d, rcond=None)
-        Yf_hat = Xf_2d @ Af
-        ss_res_f = float(((Yf_hat - Yf_2d) ** 2).sum())
-        ss_tot_f = float(((Yf_2d - Yf_2d.mean(axis=0, keepdims=True)) ** 2).sum())
+        def stack_history(arr):
+            xs = []
+            for j in range(K_hist + 1):
+                xs.append(arr[:, K_hist - j: T - 1 - j])
+            return np.concatenate(xs, axis=-1)
+        Xtr_f_3d = stack_history(train)
+        Ytr_f_3d = train[:, K_hist + 1: T]
+        Xte_f_3d = stack_history(test)
+        Yte_f_3d = test[:, K_hist + 1: T]
+        Xtr_f = Xtr_f_3d.reshape(-1, Xtr_f_3d.shape[-1])
+        Ytr_f = Ytr_f_3d.reshape(-1, Ytr_f_3d.shape[-1])
+        Xte_f = Xte_f_3d.reshape(-1, Xte_f_3d.shape[-1])
+        Yte_f = Yte_f_3d.reshape(-1, Yte_f_3d.shape[-1])
+        Af, *_ = np.linalg.lstsq(Xtr_f, Ytr_f, rcond=None)
+        Yte_f_pred = Xte_f @ Af
+        ss_res_f = float(((Yte_f_pred - Yte_f) ** 2).sum())
+        ss_tot_f = float(((Yte_f - Yte_f.mean(axis=0, keepdims=True)) ** 2).sum())
         R2_full = 1.0 - ss_res_f / max(ss_tot_f, 1e-12)
     else:
         R2_full = R2_markov
-    return R2_markov, R2_full
+    return float(R2_markov), float(R2_full)
 
 
 def lds_for_family(data_dir: Path, family: str, K: int = 32, K_hist: int = 16,

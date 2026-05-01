@@ -142,8 +142,10 @@ def main() -> None:
     fno_modes = (args.lag_modes,) + spatial_modes
     config = {
         "model_class": args.model,
-        "residual_anchor": bool(args.residual_anchor),
-        "regime":          args.regime,
+        "residual_anchor":   bool(args.residual_anchor),
+        "regime":            args.regime,
+        "noise_std":         float(args.noise_std),
+        "downsample_factor": int(args.downsample_factor),
         "model": {
             "length":         n_total,
             "spatial_shape":  list(spatial_shape),

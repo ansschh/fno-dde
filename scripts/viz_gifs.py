@@ -158,8 +158,9 @@ def main():
             print(f"  no LEMO_PC_ND checkpoint found for {fam}, skipping pred GIFs")
             continue
         # Use the standard test loader so input has proper aux channels.
+        ra = bool(cfg.get("residual_anchor", True)) if isinstance(cfg, dict) else True
         _, _, test_loader = create_apebench_dataloaders(
-            args.data_root, fam, batch_size=4, residual_anchor=False, seed=args.seed)
+            args.data_root, fam, batch_size=4, residual_anchor=ra, seed=args.seed)
         # Fetch one batch.
         with torch.no_grad():
             for batch in test_loader:

@@ -115,14 +115,46 @@ def bootstrap_improvement(a, b, n_boot=10000):
 
 
 def cohen_d(a, b):
+    """Independent-samples Cohen's d (pooled std).  KEPT for backward
+    compatibility with old test scripts; do not use for paired data —
+    use cohen_dz / hedges_g_paired instead."""
     a = np.array(a); b = np.array(b)
     pooled = np.sqrt((a.var(ddof=1) + b.var(ddof=1)) / 2)
     if pooled < 1e-12: return float("inf")
     return (b.mean() - a.mean()) / pooled
 
 
+def cohen_dz(a, b):
+    """Paired Cohen's d_z = mean(b - a) / std(b - a, ddof=1).
+    For paired observations only; matches the paired-permutation test
+    structure."""
+    a = np.array(a); b = np.array(b)
+    diff = b - a
+    sd = diff.std(ddof=1)
+    if sd < 1e-12: return float("inf")
+    return diff.mean() / sd
+
+
+def hedges_g_paired(a, b):
+    """Paired-data Hedges g with small-N correction on d_z."""
+    a = np.array(a); b = np.array(b)
+    n = len(a)
+    if n <= 1: return float("nan")
+    # Hedges (1981) small-sample correction depends on df = n-1 for paired.
+    df = n - 1
+    correction = 1 - 3 / (4 * df - 1) if df > 0 else 1.0
+    return cohen_dz(a, b) * correction
+
+
 def hedges_g(a, b):
-    """Hedges g (small-N corrected Cohen's d)."""
+    """Wrapper that defaults to PAIRED Hedges g (correct for paired data
+    like LEMO vs baseline on the same cells).  Old behaviour
+    (independent-samples) is in `hedges_g_pooled` if needed."""
+    return hedges_g_paired(a, b)
+
+
+def hedges_g_pooled(a, b):
+    """Old independent-samples Hedges g — kept for reference, NOT used."""
     n = len(a) + len(b)
     if n <= 2: return float("nan")
     correction = 1 - 3 / (4 * n - 9)
@@ -147,8 +179,9 @@ def analyze(lemo, baseline, label):
         "improvement_95ci_pct": [lo, hi],
         "paired_permutation_p": p,
         "abs_diff_mean": obs,
-        "cohen_d": cohen_d(a, b),
-        "hedges_g": hedges_g(a, b),
+        "cohen_dz_paired": cohen_dz(a, b),
+        "hedges_g": hedges_g_paired(a, b),
+        "hedges_g_pooled_legacy": hedges_g_pooled(a, b),
     }
 
 

@@ -57,17 +57,26 @@ FAMS = ["dist_exp_rd_2d", "dist_gaussian_rd_2d", "dist_gamma_rd_2d",
 # -------------------- shared loader --------------------
 
 def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
-    """Returns (model, test_loader, train_loader, cfg).  Reads residual_anchor
-    from the ckpt config (fallback True — every v2/sigma-sweep cell was
-    trained with --residual_anchor).  Required so the model sees the same
-    input distribution at eval as it did during training."""
+    """Load model + matching test/train loaders.
+
+    Reads regime, noise_std, downsample_factor, residual_anchor from the
+    saved training config (with safe fallbacks for older ckpts) so the
+    eval-time loader matches the training-time loader.  Mismatches here
+    silently produce wrong relL2 numbers."""
     from datasets.apebench_dataset import create_apebench_dataloaders
     from train.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
+    parts = ckpt_path.parts
+    regime_from_path = parts[-4] if len(parts) >= 4 else "clean"
     ra = bool(cfg.get("residual_anchor", True))
+    regime = cfg.get("regime", regime_from_path)
+    noise_std = float(cfg.get("noise_std", 0.05))
+    downsample_factor = int(cfg.get("downsample_factor", 2))
     train_loader, _, test_loader = create_apebench_dataloaders(
-        data_dir, family, batch_size=4, residual_anchor=ra, seed=42)
+        data_dir, family, batch_size=4,
+        regime=regime, noise_std=noise_std, downsample_factor=downsample_factor,
+        residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))
     in_ch = sample["input"].shape[-1]
     out_ch = sample["target"].shape[-1]
@@ -141,8 +150,13 @@ def kernel_recovery(model, family: str, device: str) -> dict:
 # -------------------- 2. cross-family transfer --------------------
 
 def cross_family_transfer(model, ckpt_family: str, data_dir: str,
-                           device: str, n_max_samples: int = 64) -> dict:
-    """Evaluate ckpt on every dist-kernel family's test shard."""
+                           device: str, n_max_samples: int = 64,
+                           residual_anchor: bool = True) -> dict:
+    """Evaluate ckpt on every dist-kernel family's test shard.
+
+    `residual_anchor` MUST match the training-time setting of the source
+    ckpt — the model was trained on residual-anchored input and will
+    behave incorrectly on raw input.  Default True (matches v2/sigma)."""
     from datasets.apebench_dataset import create_apebench_dataloaders
     out = {"ckpt_family": ckpt_family, "rel_l2": {}}
     for tgt_fam in FAMS:
@@ -150,7 +164,7 @@ def cross_family_transfer(model, ckpt_family: str, data_dir: str,
             continue
         try:
             _, _, test_loader = create_apebench_dataloaders(
-                data_dir, tgt_fam, batch_size=8, residual_anchor=False, seed=42)
+                data_dir, tgt_fam, batch_size=8, residual_anchor=residual_anchor, seed=42)
         except Exception:
             continue
         model.eval()
@@ -284,7 +298,9 @@ def process_cell(ckpt_path: Path, data_dir: str, family: str,
             summary["kernel_err"] = str(e)
     if "transfer" in analyses and not (cell_dir / "cross_family_relL2.json").exists():
         try:
-            res = cross_family_transfer(model, family, data_dir, device)
+            ra = bool(cfg.get("residual_anchor", True))
+            res = cross_family_transfer(model, family, data_dir, device,
+                                         residual_anchor=ra)
             (cell_dir / "cross_family_relL2.json").write_text(json.dumps(res, indent=2))
             summary["cross_family_n"] = len(res.get("rel_l2", {}))
         except Exception as e:

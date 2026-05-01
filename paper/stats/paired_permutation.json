@@ -12,8 +12,9 @@
       ],
       "paired_permutation_p": 9.999000099990002e-05,
       "abs_diff_mean": 0.05058080728461344,
-      "cohen_d": 7.211143748506875,
-      "hedges_g": 7.14951004125468
+      "cohen_dz_paired": 5.1667128283314865,
+      "hedges_g": 5.0781406084172325,
+      "hedges_g_pooled_legacy": 7.14951004125468
     },
     "per_regime": {
       "clean": {
@@ -64,8 +65,9 @@
       ],
       "paired_permutation_p": 9.999000099990002e-05,
       "abs_diff_mean": 0.08870969617350231,
-      "cohen_d": 8.815302998442982,
-      "hedges_g": 8.73995852837082
+      "cohen_dz_paired": 6.006879678318033,
+      "hedges_g": 5.903904598118296,
+      "hedges_g_pooled_legacy": 8.73995852837082
     },
     "per_regime": {
       "clean": {
@@ -116,8 +118,9 @@
       ],
       "paired_permutation_p": 9.999000099990002e-05,
       "abs_diff_mean": 0.08953858506239122,
-      "cohen_d": 8.911906445768322,
-      "hedges_g": 8.8357363052062
+      "cohen_dz_paired": 6.112097554332672,
+      "hedges_g": 6.00731873911554,
+      "hedges_g_pooled_legacy": 8.8357363052062
     },
     "per_regime": {
       "clean": {
@@ -168,8 +171,9 @@
       ],
       "paired_permutation_p": 0.004199580041995801,
       "abs_diff_mean": 0.0024919183957245617,
-      "cohen_d": 0.3718211988812122,
-      "hedges_g": 0.3686432399164155
+      "cohen_dz_paired": 0.4552685731752036,
+      "hedges_g": 0.4474639690636287,
+      "hedges_g_pooled_legacy": 0.3686432399164155
     },
     "per_regime": {
       "clean": {
@@ -220,8 +224,9 @@
       ],
       "paired_permutation_p": 9.999000099990002e-05,
       "abs_diff_mean": 0.4051377699399988,
-      "cohen_d": 40.42963932953026,
-      "hedges_g": 40.084086856628296
+      "cohen_dz_paired": 23.836147289806785,
+      "hedges_g": 23.427527621981525,
+      "hedges_g_pooled_legacy": 40.084086856628296
     },
     "per_regime": {
       "clean": {

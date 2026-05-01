@@ -29,16 +29,28 @@ sys.path.insert(0, str(REPO / "src"))
 
 
 def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
+    """Load model + matching test loader.
+
+    CRITICAL: every loader knob that affects the input distribution must
+    match the training-time setting, else we present the model with the
+    wrong distribution and get badly off relL2.  We read these from the
+    saved config (post-fix); for older ckpts that predate the saving we
+    derive from the cell path: parts[-4] is the regime, with the v2
+    standard noise_std=0.05 and downsample_factor=2."""
     from datasets.apebench_dataset import create_apebench_dataloaders
     from train.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
-    # Read residual_anchor from the saved training config; fall back to True
-    # because every v2/sigma-sweep cell was trained with --residual_anchor.
-    # Older ckpts that pre-date the flag-saving change won't have this key.
+    parts = ckpt_path.parts
+    regime_from_path = parts[-4] if len(parts) >= 4 else "clean"
     ra = bool(cfg.get("residual_anchor", True))
+    regime = cfg.get("regime", regime_from_path)
+    noise_std = float(cfg.get("noise_std", 0.05))
+    downsample_factor = int(cfg.get("downsample_factor", 2))
     _, _, test_loader = create_apebench_dataloaders(
-        data_dir, family, batch_size=8, residual_anchor=ra, seed=42)
+        data_dir, family, batch_size=8,
+        regime=regime, noise_std=noise_std, downsample_factor=downsample_factor,
+        residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))
     in_ch = sample["input"].shape[-1]
     out_ch = sample["target"].shape[-1]
@@ -69,6 +81,13 @@ def compute_per_frame(model, test_loader, device):
         for batch in test_loader:
             x = batch["input"].to(device).float()
             y = batch["target"].to(device).float()
+            # In residual_anchor mode the loss numerator (yhat - y) cancels
+            # the anchor (it's the same residual on both), so we use `y` for
+            # the squared-error.  The DENOMINATOR must be the un-anchored
+            # target (target_raw); otherwise rel_l2 is computed in
+            # residual-space and the headline definition (training metric)
+            # disagrees with the per-step metric reported here.
+            y_raw = batch.get("target_raw", batch["target"]).to(device).float()
             mask = batch["loss_mask"].to(device).float()
             yhat = model(x)
             n_spatial = y.dim() - 3
@@ -78,12 +97,14 @@ def compute_per_frame(model, test_loader, device):
             T = y.shape[1]
             # Per-(B, T) sums over spatial+channel:
             diff_sq_bt = ((yhat - y) ** 2 * mask_bc).sum(dim=spatial_dims)  # (B, T)
-            tgt_sq_bt = (y ** 2 * mask_bc).sum(dim=spatial_dims)
-            # Naive: predict last-input-frame state channels.
+            tgt_sq_bt = (y_raw ** 2 * mask_bc).sum(dim=spatial_dims)         # un-anchored denominator
+            # Naive: predict last-input-frame state channels.  Same correction:
+            # the diff for naive uses target_raw vs the input last frame
+            # (which is the anchor in residual mode, so naive predicts 0
+            # in residual space → diff equals -y_raw in original space).
             n_out_ch = y.shape[-1]
-            last_in = x[:, -1:, ..., :n_out_ch].expand_as(y)
-            naive_diff_sq_bt = ((last_in - y) ** 2 * mask_bc).sum(dim=spatial_dims)
-            # Per-(B, T) cell count from mask:
+            last_in = x[:, -1:, ..., :n_out_ch].expand_as(y_raw)
+            naive_diff_sq_bt = ((last_in - y_raw) ** 2 * mask_bc).sum(dim=spatial_dims)
             cell_count_bt = mask_bc.sum(dim=spatial_dims).clamp_min(1.0)  # (B, T)
 
             # Aggregate sums per-step (over batch dim for now):
@@ -351,9 +372,11 @@ def capture_equivariance(model, test_loader, device, shifts=(1, 4, 16), n_max_sa
     """
     model.eval()
     results = {}
-    sample_cap_hit = False
+    n_seen = 0
     with torch.no_grad():
         for batch in test_loader:
+            if n_seen >= n_max_samples:
+                break
             x = batch["input"].to(device).float()
             y = batch["target"].to(device).float()
             B = x.shape[0]
@@ -375,9 +398,7 @@ def capture_equivariance(model, test_loader, device, shifts=(1, 4, 16), n_max_sa
                 if key not in results:
                     results[key] = []
                 results[key].extend(rel.tolist())
-            if y.shape[0] >= n_max_samples:
-                sample_cap_hit = True
-                break
+            n_seen += B
     out = {}
     max_err = 0.0
     for k in shifts:
