@@ -90,8 +90,11 @@ def main() -> None:
     ap.add_argument("--data_dir", default="data_apebench")
     ap.add_argument("--family", required=True)
     ap.add_argument("--model", default="lemo_pc_nd",
-                    choices=["lemo_nd", "lemo_pc_nd", "causal_lemo_pc_nd", "fno_nd", "memno_nd", "ffno_nd",
-                              "markov_fno_nd", "windowed_fno_nd", "unet_nd"])
+                    choices=["lemo_nd", "lemo_pc_nd", "causal_lemo_pc_nd",
+                              "per_lag_mlp_nd", "fno_nd", "memno_nd", "ffno_nd",
+                              "markov_fno_nd", "windowed_fno_nd", "unet_nd",
+                              "fno_film_nd", "noneq_film_nd", "lemo_bcorrect_nd",
+                              "nide_nd", "ndde_nd", "s4_nd"])
     ap.add_argument("--epochs", type=int, default=50)
     ap.add_argument("--batch_size", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-3)

@@ -76,6 +76,24 @@ def build_model(config: dict, in_channels: int, out_channels: int,
         from models.lemo_pc_nd import create_causal_lemo_pc_nd
         return create_causal_lemo_pc_nd(in_channels, out_channels, config, length=length)
 
+    if model_class == "per_lag_mlp_nd":
+        from models.per_lag_mlp_nd import create_per_lag_mlp_nd
+        return create_per_lag_mlp_nd(in_channels, out_channels, config, length=length)
+
+    # FiLM-vs-equivariance ablation suite (A1/A2/A3 from film_ablations.py;
+    # A4 = lemo_pc_nd is dispatched above).
+    if model_class == "fno_film_nd":
+        from models.film_ablations import create_fno_film_nd
+        return create_fno_film_nd(in_channels, out_channels, config, length=length)
+
+    if model_class == "noneq_film_nd":
+        from models.film_ablations import create_noneq_film_nd
+        return create_noneq_film_nd(in_channels, out_channels, config, length=length)
+
+    if model_class == "lemo_bcorrect_nd":
+        from models.film_ablations import create_lemo_bcorrect_nd
+        return create_lemo_bcorrect_nd(in_channels, out_channels, config, length=length)
+
     if model_class == "fno_nd":
         from models.fno_nd import create_fno_nd
         return create_fno_nd(in_channels, out_channels, config)
@@ -100,6 +118,18 @@ def build_model(config: dict, in_channels: int, out_channels: int,
         from models.baselines_nd import create_ffno_nd
         return create_ffno_nd(in_channels, out_channels, config, length=length)
 
+    if model_class == "nide_nd":
+        from models.baselines_memory_aware import create_nide_nd
+        return create_nide_nd(in_channels, out_channels, config, length=length)
+
+    if model_class == "ndde_nd":
+        from models.baselines_memory_aware import create_ndde_nd
+        return create_ndde_nd(in_channels, out_channels, config, length=length)
+
+    if model_class == "s4_nd":
+        from models.baselines_memory_aware import create_s4_nd
+        return create_s4_nd(in_channels, out_channels, config, length=length)
+
     if model_class in _RESEARCH_BASELINES:
         return create_research_baseline(
             model_class, in_channels, out_channels, length, config,
@@ -107,6 +137,8 @@ def build_model(config: dict, in_channels: int, out_channels: int,
 
     raise ValueError(
         f"unknown model_class: {model_class!r}. "
-        f"Allowed: mlp, fno1d, lemo, lemo_nd, lemo_pc_nd, causal_lemo_pc_nd, fno_nd, "
+        f"Allowed: mlp, fno1d, lemo, lemo_nd, lemo_pc_nd, causal_lemo_pc_nd, "
+        f"per_lag_mlp_nd, fno_film_nd, noneq_film_nd, lemo_bcorrect_nd, fno_nd, "
+        f"nide_nd, ndde_nd, s4_nd, "
         f"{sorted(_RESEARCH_BASELINES)}"
     )
