@@ -69,7 +69,7 @@ def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
     cfg = ckpt["config"]
     parts = ckpt_path.parts
     regime_from_path = parts[-4] if len(parts) >= 4 else "clean"
-    ra = bool(cfg.get("residual_anchor", True))
+    ra = bool(cfg.get("residual_anchor", False))
     regime = cfg.get("regime", regime_from_path)
     noise_std = float(cfg.get("noise_std", 0.05))
     downsample_factor = int(cfg.get("downsample_factor", 2))
@@ -358,7 +358,7 @@ def process_cell(ckpt_path: Path, data_dir: str, family: str,
             summary["kernel_err"] = str(e)
     if "transfer" in analyses and not (cell_dir / "cross_family_relL2.json").exists():
         try:
-            ra = bool(cfg.get("residual_anchor", True))
+            ra = bool(cfg.get("residual_anchor", False))
             res = cross_family_transfer(model, family, data_dir, device,
                                          residual_anchor=ra)
             (cell_dir / "cross_family_relL2.json").write_text(json.dumps(res, indent=2))

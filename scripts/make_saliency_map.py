@@ -66,7 +66,7 @@ def saliency_for_family(fam: str, device: str):
         return None
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
-    ra = bool(cfg.get("residual_anchor", True))
+    ra = bool(cfg.get("residual_anchor", False))
     regime = cfg.get("regime", "clean")
     noise_std = float(cfg.get("noise_std", 0.05))
     downsample_factor = int(cfg.get("downsample_factor", 2))

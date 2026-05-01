@@ -43,7 +43,7 @@ def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
     cfg = ckpt["config"]
     parts = ckpt_path.parts
     regime_from_path = parts[-4] if len(parts) >= 4 else "clean"
-    ra = bool(cfg.get("residual_anchor", True))
+    ra = bool(cfg.get("residual_anchor", False))
     regime = cfg.get("regime", regime_from_path)
     noise_std = float(cfg.get("noise_std", 0.05))
     downsample_factor = int(cfg.get("downsample_factor", 2))

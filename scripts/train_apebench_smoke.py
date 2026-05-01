@@ -251,6 +251,8 @@ def main() -> None:
                 "seed": args.seed,
                 "regime": args.regime,
                 "residual_anchor": bool(args.residual_anchor),
+                "noise_std": float(args.noise_std),
+                "downsample_factor": int(args.downsample_factor),
                 "config": config["model"]},
               open(out_dir / "test_results.json", "w"), indent=2)
 

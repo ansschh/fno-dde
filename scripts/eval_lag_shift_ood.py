@@ -32,7 +32,7 @@ def evaluate_one_cell(ckpt_path: Path, ood_data_dir: str, family: str,
     from train.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
-    ra = bool(cfg.get("residual_anchor", True))
+    ra = bool(cfg.get("residual_anchor", False))
     _, _, test_loader = create_apebench_dataloaders(
         ood_data_dir, family, batch_size=8, residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))

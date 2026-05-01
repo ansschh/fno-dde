@@ -24,6 +24,7 @@ module load cuda 2>/dev/null || true
 
 REPO=$HOME/dde-fno
 cd $REPO
+mkdir -p slurm_logs
 source venv/bin/activate || python3 -m venv venv && source venv/bin/activate
 pip install h5py matplotlib scipy pyyaml tqdm tensorboard --break-system-packages -q
 
@@ -54,7 +55,7 @@ python3 -u scripts/train_apebench_smoke.py \
   --width 64 --n_layers 3 --lag_modes 24 --spatial_modes 12 \
   --seed $SEED \
   --data_dir "data_orbit_ood/m${M}" \
-  --output_dir "outputs/orbit_ood/${MODEL}/m${M}/s${SEED}" \
+  --output_dir "outputs/orbit_ood/m${M}" \
   --residual_anchor
 
 echo "[$(date)] Job $idx done."

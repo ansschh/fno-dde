@@ -571,8 +571,19 @@ class NDDE_ND(nn.Module):
             mean_dims = tuple(range(1, h.dim() - 1))
             summary = h.mean(dim=mean_dims)                         # (B, width)
             offsets = self.adaptive_head(summary)                   # (B, K)
-            offsets = 0.5 * max_tau * torch.tanh(offsets)
-            taus = (base.unsqueeze(0) + offsets).clamp(0.0, max_tau)
+            # Reparameterize the (base + offset) sum through a sigmoid so
+            # taus are smoothly bounded to (0, max_tau) without zeroing
+            # gradients at the boundary (the previous .clamp(0, max_tau) had
+            # exactly-zero gradient at the boundary, silently killing
+            # adaptive-delay learning when the raw sum saturates — H1 fix).
+            # Center the input at logit(base/max_tau) so the adaptive
+            # offsets start as small perturbations to the base delay.
+            base_logit = torch.logit(
+                (base / max_tau).clamp(1e-3, 1 - 1e-3)
+            )                                                       # (K,)
+            taus = max_tau * torch.sigmoid(
+                base_logit.unsqueeze(0) + offsets
+            )                                                       # (B, K) in (0, max_tau)
             return taus
         return base                                                  # (K,)
 

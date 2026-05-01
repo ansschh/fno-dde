@@ -27,6 +27,7 @@ module load python/3.10 2>/dev/null || module load python 2>/dev/null || true
 
 REPO=$HOME/dde-fno
 cd $REPO
+mkdir -p slurm_logs
 source venv/bin/activate || python3 -m venv venv && source venv/bin/activate
 pip install h5py matplotlib scipy pyyaml tqdm --break-system-packages -q
 

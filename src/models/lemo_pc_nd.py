@@ -102,6 +102,23 @@ class FiLMLagSpectralND(nn.Module):
             W = self.weights_time[..., :M_t]
             W_padded = F.pad(W, (0, L - M_t))               # (in, out, L)
             K_full = torch.fft.rfft(W_padded, dim=-1)       # (in, out, out_modes)
+            # Apply sigma-projection to causal kernel — without this, the
+            # causal=True branch silently violates the σ-Lipschitz constraint
+            # that motivates `sigma`. Same SVD-with-Frobenius-fallback pattern
+            # as the non-causal branch (cuSOLVER divergence on ill-conditioned
+            # init falls back to per-mode Frobenius rescale, which preserves
+            # σ-bound conservatively).
+            if self.sigma is not None:
+                Km = K_full.permute(2, 0, 1).contiguous()       # (out_modes, in, out)
+                try:
+                    U, S, Vh = torch.linalg.svd(Km, full_matrices=False)
+                    S_clamped = torch.clamp(S, max=float(self.sigma))
+                    K_proj = (U * S_clamped.unsqueeze(-2).to(U.dtype)) @ Vh
+                except torch._C._LinAlgError:
+                    frob = torch.linalg.norm(Km, dim=(-2, -1))  # (out_modes,)
+                    scale = torch.clamp(float(self.sigma) / (frob + 1e-12), max=1.0)
+                    K_proj = Km * scale.unsqueeze(-1).unsqueeze(-1).to(Km.dtype)
+                K_full = K_proj.permute(1, 2, 0).contiguous()    # back to (in, out, out_modes)
             eq = f"iom,bi{sp_letters}m->bo{sp_letters}m"
             active = torch.einsum(eq, K_full, x_hat)        # (B, out, *spatial, out_modes)
             eff_modes = out_modes

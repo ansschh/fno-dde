@@ -24,6 +24,7 @@ module load cuda 2>/dev/null || true
 
 REPO=$HOME/dde-fno
 cd $REPO
+mkdir -p slurm_logs
 source venv/bin/activate || python3 -m venv venv && source venv/bin/activate
 pip install h5py matplotlib scipy pyyaml tqdm tensorboard --break-system-packages -q
 
@@ -58,7 +59,7 @@ python3 -u scripts/train_apebench_smoke.py \
   --width 64 --n_layers 3 --lag_modes 24 --spatial_modes 12 \
   --seed $SEED \
   --data_dir data_dde_pde \
-  --output_dir "outputs/memno_ffno/raw/${FAM}/${REGIME}/${MODEL}/s${SEED}" \
+  --output_dir "outputs/memno_ffno/raw" \
   --residual_anchor
 
 echo "[$(date)] Job $idx training done -- running post-hoc captures..."
