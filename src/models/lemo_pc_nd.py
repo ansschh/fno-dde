@@ -124,9 +124,22 @@ class FiLMLagSpectralND(nn.Module):
             if self.sigma is not None:
                 K_raw = self.weights                            # (in, out, modes) cfloat
                 Km = K_raw.permute(2, 0, 1).contiguous()        # (modes, in, out)
-                U, S, Vh = torch.linalg.svd(Km, full_matrices=False)
-                S_clamped = torch.clamp(S, max=float(self.sigma))
-                K_proj = (U * S_clamped.unsqueeze(-2).to(U.dtype)) @ Vh
+                try:
+                    U, S, Vh = torch.linalg.svd(Km, full_matrices=False)
+                    S_clamped = torch.clamp(S, max=float(self.sigma))
+                    K_proj = (U * S_clamped.unsqueeze(-2).to(U.dtype)) @ Vh
+                except torch._C._LinAlgError:
+                    # cuSOLVER SVD diverges on ill-conditioned random init
+                    # (error 63 = "failed to converge", common in early
+                    # training). Fall back to per-mode Frobenius rescale:
+                    # ‖K‖_op ≤ ‖K‖_F so capping by Frobenius gives a valid
+                    # (conservative) upper bound on operator norm and
+                    # preserves the σ-Lipschitz guarantee. Differentiable
+                    # everywhere; tightens to true SVD projection once
+                    # weights stabilize and SVD succeeds.
+                    frob = torch.linalg.norm(Km, dim=(-2, -1))  # (modes,)
+                    scale = torch.clamp(float(self.sigma) / (frob + 1e-12), max=1.0)
+                    K_proj = Km * scale.unsqueeze(-1).unsqueeze(-1).to(Km.dtype)
                 K = K_proj.permute(1, 2, 0).contiguous()        # back to (in, out, modes)
             else:
                 K = self.weights
