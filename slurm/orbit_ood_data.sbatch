@@ -1,11 +1,17 @@
 #!/bin/bash
 #SBATCH --job-name=lemo-orbit-data
-#SBATCH --partition=cpu
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
 #SBATCH --output=slurm_logs/%j_orbit_data.out
 #SBATCH --error=slurm_logs/%j_orbit_data.err
+
+# NOTE: this is a CPU-bound data-gen job that uses --partition=gpu --gres=gpu:1
+# only because Caltech HPC doesn't expose a `cpu` partition under that name.
+# The Python script does not actually use CUDA. Wasteful by ~30min of GPU time.
+# If you find the right CPU-only partition name (sinfo -s), update this.
 
 # T2 orbit-OOD data generation (CPU job).
 # Produces data_orbit_ood/m{1,2,4,8,16,32}/ datasets at the audited config:
