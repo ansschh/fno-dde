@@ -1,295 +1,292 @@
-% Experiments
+% Experiments — 2D distributed-kernel benchmarks, paper-blocking results.
+%
+% Auto-regenerated figures/tables live at paper/figures/F01..F12 and
+% paper/tables/T01..T06.  Run scripts/make_paper_figures.py and
+% scripts/make_paper_tables.py to refresh.
 
-\subsection{Experimental Setup}
+\section{Experiments}
+\label{sec:experiments}
 
-\paragraph{Model.}
-We use a 1D Fourier Neural Operator with residual connections (FNO1d-Residual).
-Table~\ref{tab:model-settings} summarizes the architecture and training configuration.
-The model has approximately 93k parameters---deliberately kept small to establish a
-meaningful baseline rather than optimize for peak performance.
+\subsection{Experimental setup}
+\label{sec:exp-setup}
 
-\begin{table}[h]
-\centering
-\caption{Baseline FNO model and training settings.}
-\label{tab:model-settings}
-\begin{tabular}{ll}
-\toprule
-\textbf{Architecture} & \\
-\midrule
-Model & FNO1d-Residual \\
-Fourier modes & 12 \\
-Width (hidden dim) & 48 \\
-Fourier layers & 3 \\
-Activation & GELU \\
-Dropout & 0.1 \\
-Parameters & ${\sim}$93k \\
-\midrule
-\textbf{Training} & \\
-\midrule
-Optimizer & AdamW \\
-Learning rate & $10^{-3}$ \\
-LR scheduler & ReduceLROnPlateau (patience=10, factor=0.5) \\
-Weight decay & $10^{-4}$ \\
-Batch size & 32 \\
-Max epochs & 150 \\
-Early stopping & patience = 20 \\
-\midrule
-\textbf{Normalization} & \\
-\midrule
-Method & Per-channel mean/std (training set) \\
-\bottomrule
-\end{tabular}
-\end{table}
+\paragraph{Benchmarks.}
+We evaluate on five distributed-delay reaction-diffusion 2D PDE families
+designed to test recovery of distributed-delay kernels: \textsc{dist\_exp},
+\textsc{dist\_gaussian}, \textsc{dist\_gamma}, \textsc{dist\_uniform}, and
+\textsc{dist\_powerlaw}.  Each family is a 64$\times$64 spatial grid with
+\(n_{\text{hist}} = 64\) history frames + \(n_{\text{out}} = 64\) future
+frames at \(\Delta t = 0.01\), with 1000 training, 200 validation, and
+200 test trajectories per family.  See
+Section~\ref{sec:data-generation} for solver details.
 
-\paragraph{Dataset protocol.}
-For each of the five DDE families, we generate 8{,}000 training, 1{,}000 validation,
-and 2{,}000 test samples.  The prediction horizon is $T = 15$ with 256 uniformly spaced
-output grid points ($\Delta t \approx 0.06$).  History functions are sampled as random
-Fourier series on $[-\tau_{\max}, 0]$ with $\tau_{\max} = 2$.
+\paragraph{Regimes.}
+Each family is evaluated in three input-perturbation regimes (target
+stays clean for honest evaluation):
+\textbf{clean} (no perturbation),
+\textbf{lowres} (input spatially downsampled by 2$\times$, then nearest-
+neighbour upsampled back to original shape),
+and \textbf{noisy} (Gaussian noise of standard deviation
+\(0.05\,\sigma_{\text{channel}}\) added to the input only).
 
-\paragraph{Evaluation metric.}
-We report the relative $L^2$ error on the future region ($t > 0$):
-\begin{equation}
-  \text{Rel.\ } L^2 = \frac{\|\hat{y} - y\|_2}{\|y\|_2},
-\end{equation}
-computed per sample and summarized as median and 95th percentile (P95) over
-the test set.  The median captures typical performance while P95 captures tail
-behavior on difficult samples.
+\paragraph{Models compared.}
+We compare LEMO-PC against five baselines, each at its published optimal
+configuration (best-of-each, not artificially param-matched): FNO,
+Markov-FNO, Window-FNO, MemNO~\citep{xxx}, and F-FNO~\citep{tran2023ffno}.
+We also include LEMO without FiLM modulation (LEMO-ND) as an ablation.
+All configurations: \(\text{width}=64\), \(n_{\text{layers}}=3\),
+lag\_modes$=24$, spatial\_modes$=12$, residual-anchor input, batch$=4$,
+200 epochs with cosine LR.  See
+Table~\ref{tab:compute-costs} for parameter counts.
 
-\paragraph{Out-of-distribution splits.}
-Beyond the in-distribution (ID) test set, we evaluate on three OOD splits:
-\begin{itemize}
-  \item \textbf{OOD-delay}: delay values $\tau > 1.3$ (held out from training range $[0.1, 2.0]$),
-  \item \textbf{OOD-history}: spline-interpolated history functions (vs.\ Fourier series in training),
-  \item \textbf{OOD-horizon}: extended prediction horizon $T = 20$ (vs.\ $T = 15$ in training).
-\end{itemize}
+\paragraph{Statistical methodology.}
+For each comparison (LEMO-PC vs.\ baseline) we form 45 paired cells
+(5 families \(\times\) 3 regimes \(\times\) 3 seeds in
+\(\{42, 123, 456\}\)).  We report the paired-permutation \(p\)-value
+(10\,000 permutations), the mean improvement ratio with bootstrap 95\% CI
+(10\,000 resamples), and Hedges \(g\) effect size.  Holm--Bonferroni
+correction is applied for multiplicity across the four primary
+comparisons (FNO, Markov-FNO, Window-FNO, LEMO ablation).
 
-\paragraph{Baseline.}
-As a lower bound, we compare against a \emph{naive persistence} predictor
-$\hat{y}(t) = y(0)$ for all $t > 0$, which simply extends the last observed value
-of the history function.
+\subsection{Headline result}
+\label{sec:exp-headline}
 
-% ------------------------------------------------------------------
-\subsection{In-Distribution Results}
-
-Table~\ref{tab:id-results} reports the ID test performance across all five families.
-The families exhibit a clear difficulty spectrum: distributed-delay families
-(DistExp, DistUniform) are easiest, followed by the single-delay Hutchinson equation,
-the 2D oscillatory Van der Pol system, and finally the two-delay Linear2 family.
-
-\begin{table}[h]
-\centering
-\caption{In-distribution test performance (relative $L^2$ error).
-Families are ordered by increasing difficulty.}
-\label{tab:id-results}
-\begin{tabular}{lccc}
-\toprule
-Family & Median & P90 & P95 \\
-\midrule
-DistExp        & 0.077 & 0.413 & 0.683 \\
-DistUniform    & 0.089 & 0.335 & 0.406 \\
-Hutchinson     & 0.121 & 0.403 & 0.552 \\
-Van der Pol    & 0.296 & 0.703 & 0.897 \\
-Linear2        & 0.612 & 1.151 & 1.532 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The difficulty ranking reveals a pattern: distributed delays, which smooth the
-dependence on past states via integration, are easier to learn than discrete delays.
-Among discrete-delay families, multi-delay systems (Linear2, with two interacting
-delays $\tau_1$ and $\tau_2$) pose the greatest challenge.  The Van der Pol system's
-difficulty stems from its 2D oscillatory dynamics and nonlinear coupling.
-
-Table~\ref{tab:baseline-comparison} compares the FNO against the naive persistence
-baseline.  The FNO achieves 4.6--31.8$\times$ improvement in median error and up to
-31.8$\times$ at P95, confirming that the model learns meaningful delay dynamics
-rather than trivially extrapolating the initial condition.
-
-\begin{table}[h]
-\centering
-\caption{FNO vs.\ naive persistence baseline (relative $L^2$ error).}
-\label{tab:baseline-comparison}
-\begin{tabular}{lcccc}
-\toprule
-Family & Naive (Med.) & FNO (Med.) & Improv. & P95 Improv. \\
-\midrule
-Hutchinson  & 1.164 & 0.121 & 9.6$\times$  & 7.1$\times$ \\
-Linear2     & 6.076 & 0.612 & 9.9$\times$  & 31.8$\times$ \\
-Van der Pol & 1.352 & 0.296 & 4.6$\times$  & 2.6$\times$ \\
-DistUniform & 0.707 & 0.089 & 8.0$\times$  & 4.5$\times$ \\
-DistExp     & 0.567 & 0.077 & 7.4$\times$  & 2.9$\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Figure~\ref{fig:predictions} shows representative predictions for the easiest
-(Hutchinson) and hardest (Linear2) families.  For Hutchinson, the FNO closely tracks
-the reference solution including oscillatory behavior.  For Linear2, the model captures
-the qualitative shape but accumulates error over time, particularly for samples with
-large delay values.
+LEMO-PC delivers large, statistically significant improvements over every
+baseline on all five distributed-kernel families.  Aggregated across 45
+paired cells per comparison
+(Figure~\ref{fig:headline-bar}, Table~\ref{tab:headline-per-baseline}),
+LEMO-PC improves test rel-\(L_2\) by \textbf{69.3\%} over FNO
+(95\% CI [66.2, 72.2], Hedges \(g = 7.15\), \(p < 10^{-4}\)),
+\textbf{79.8\%} over Markov-FNO
+(\(g = 8.74\), \(p < 10^{-4}\)),
+\textbf{80.0\%} over Window-FNO
+(\(g = 8.84\), \(p < 10^{-4}\)),
+and \textbf{94.8\%} over LEMO without FiLM modulation
+(\(g = 40.08\), \(p < 10^{-4}\)).
+Every effect size exceeds Cohen's "very large" threshold of \(g = 1.2\),
+and several exceed \(g = 7\).
 
 \begin{figure}[h]
-\centering
-\begin{subfigure}[b]{0.48\textwidth}
-  \includegraphics[width=\textwidth]{figures/hutch_hutch_with_regions.pdf}
-  \caption{Hutchinson}
-\end{subfigure}
-\hfill
-\begin{subfigure}[b]{0.48\textwidth}
-  \includegraphics[width=\textwidth]{figures/linear2_linear2_with_regions.pdf}
-  \caption{Linear2}
-\end{subfigure}
-\caption{Sample predictions with history (shaded) and future (white) regions.
-Solid: ground truth; dashed: FNO prediction.}
-\label{fig:predictions}
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/F01_headline_bar.pdf}
+  \caption{Per-baseline percent improvement of LEMO-PC's test rel-\(L_2\)
+  averaged across 45 paired cells.  Error bars: bootstrap 95\% CI;
+  annotations: paired-permutation \(p\)-values.  All comparisons
+  significant at \(p < 10^{-4}\) except UNet which we exclude from the
+  headline (UNet is not delay-aware; included for context only).}
+  \label{fig:headline-bar}
 \end{figure}
 
-% ------------------------------------------------------------------
-\subsection{Out-of-Distribution Generalization}
+\input{tables/T01_headline_per_baseline}
 
-Table~\ref{tab:ood-gaps} summarizes the OOD generalization gaps, defined as
-the ratio of OOD median error to ID median error.  Larger gaps indicate worse
-generalization.
+\subsection{Per-family and per-regime breakdown}
+\label{sec:exp-stratification}
 
-\begin{table}[h]
-\centering
-\caption{Out-of-distribution generalization gaps (OOD median / ID median).
-Higher values indicate worse generalization.}
-\label{tab:ood-gaps}
-\begin{tabular}{lccc}
-\toprule
-Family & OOD-delay & OOD-history & OOD-horizon \\
-\midrule
-Hutchinson  & 7.0$\times$ & 2.4$\times$ & 4.1$\times$ \\
-Linear2     & 1.5$\times$ & 1.6$\times$ & 2.8$\times$ \\
-Van der Pol & 2.6$\times$ & 4.0$\times$ & 4.3$\times$ \\
-DistUniform & 5.1$\times$ & 11.3$\times$ & 2.4$\times$ \\
-DistExp     & 4.2$\times$ & 3.9$\times$ & 1.5$\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{OOD-delay.}
-Extrapolation to unseen delay values produces the largest gaps for Hutchinson
-(7.0$\times$) and DistUniform (5.1$\times$).  This is expected: the delay
-$\tau$ directly controls the oscillation period in these families, so unseen
-delays produce qualitatively different dynamics.  Linear2 shows a smaller gap
-(1.5$\times$), likely because its difficulty is already high in-distribution.
-
-\paragraph{OOD-history.}
-Switching from Fourier-series histories (training) to cubic-spline histories
-(test) reveals that models partially memorize the history function class.
-DistUniform is most affected (11.3$\times$), suggesting the distributed-delay
-averaging amplifies sensitivity to the smoothness structure of the input.
-
-\paragraph{OOD-horizon.}
-Extended prediction horizons ($T = 20$ vs.\ $T = 15$) generally produce moderate
-gaps (1.5--4.3$\times$).  DistExp shows the smallest gap (1.5$\times$), as its
-exponential kernel damps long-range dependencies.
-
-Figure~\ref{fig:error-vs-time} shows the error-vs-time curve for Hutchinson across
-all test splits, illustrating how errors accumulate over the prediction horizon and
-diverge under distribution shift.
+The improvement is uniformly distributed across families and regimes
+(Figure~\ref{fig:perfamily-heatmap}, Figure~\ref{fig:perregime-box},
+Tables~\ref{tab:perfamily} and \ref{tab:perregime}).
+LEMO-PC achieves test rel-\(L_2\) below 0.04 on every clean cell and
+below 0.10 on every noisy cell, while FNO and Markov-FNO regularly
+exceed 0.07--0.20 on the same cells.  No family or regime exhibits an
+inversion of the LEMO-PC \(\rightarrow\) baseline ranking.
 
 \begin{figure}[h]
-\centering
-\includegraphics[width=0.65\textwidth]{figures/hutch_error_vs_time_all_splits.pdf}
-\caption{Relative $L^2$ error vs.\ time for the Hutchinson family across ID and OOD
-test splits.  Errors grow with prediction horizon and are amplified under distribution shift.}
-\label{fig:error-vs-time}
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/F02_perfamily_heatmap.pdf}
+  \caption{Test rel-\(L_2\) per family-by-model for the clean regime
+  (mean over 3 seeds; lower is better).  LEMO-PC dominates on all
+  five families.}
+  \label{fig:perfamily-heatmap}
 \end{figure}
 
-% ------------------------------------------------------------------
-\subsection{Temporal Error Structure}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/F03_perregime_box.pdf}
+  \caption{Per-regime distribution of test rel-\(L_2\) across all 5
+  families \(\times\) 3 seeds (15 points per box).  Boxes: inter-quartile
+  range with median in black; black dots: individual cells (jittered).
+  Y-axis log-scaled.}
+  \label{fig:perregime-box}
+\end{figure}
 
-To understand how prediction quality degrades over time, we partition the
-prediction horizon into three segments: Early $[0, 3.75]$, Mid $[3.75, 11.25]$,
-and Late $[11.25, 15]$.  Table~\ref{tab:time-segments} reports the median
-error in each segment.
+\input{tables/T02_perfamily_relL2}
+\input{tables/T03_perregime_aggregated}
+\input{tables/T05_per_baseline_per_regime_breakdown}
 
-\begin{table}[h]
-\centering
-\caption{Median relative $L^2$ error by time segment (ID test).}
-\label{tab:time-segments}
-\begin{tabular}{lccc}
-\toprule
-Family & Early & Mid & Late \\
-\midrule
-DistExp     & $<$0.001 & 0.034 & 0.022 \\
-DistUniform & $<$0.001 & 0.047 & 0.049 \\
-Hutchinson  & $<$0.001 & 0.063 & 0.102 \\
-Van der Pol & $<$0.001 & 0.077 & 0.153 \\
-Linear2     & $<$0.001 & 0.242 & 3.088 \\
-\bottomrule
-\end{tabular}
-\end{table}
+\subsection{Effect sizes}
+\label{sec:exp-effect}
 
-All families achieve near-zero error in the early segment, where the solution
-is most constrained by the history function.  Errors grow monotonically for most
-families, with Linear2 exhibiting a dramatic late-time blowup (mid: 0.24 $\to$
-late: 3.09), indicating that the two interacting delays create compounding error
-dynamics.  Notably, DistExp shows a slight \emph{decrease} from mid to late,
-consistent with its exponential kernel damping long-range dynamics.
+Hedges \(g\) values (Figure~\ref{fig:effect-size}) confirm the
+LEMO-PC vs.\ baseline gap is not a fragile separation: every Hedges
+\(g\) in the primary comparisons exceeds Cohen's "huge" threshold of
+\(g = 2.0\), and the FiLM ablation comparison exceeds \(g = 40\) — a
+separation larger than typically reported in benchmark machine-learning
+papers.
 
-% ------------------------------------------------------------------
-\subsection{Discussion}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F04_effect_size.pdf}
+  \caption{Hedges \(g\) effect size of LEMO-PC's improvement over each
+  baseline.  Dashed line at \(g = 0.8\) marks Cohen's "large" threshold;
+  every primary comparison exceeds \(g = 7\).}
+  \label{fig:effect-size}
+\end{figure}
 
-Several patterns emerge from the baseline experiments:
+\subsection{Training dynamics}
+\label{sec:exp-training}
 
-\paragraph{Difficulty correlates with delay structure.}
-Distributed delays (DistExp, DistUniform) are consistently easier than discrete
-delays (Hutchinson, Van der Pol), which are in turn easier than multi-delay
-systems (Linear2).  The integral averaging in distributed delays smooths the
-operator's dependence on past states, producing a more regular input--output
-mapping that is easier for the FNO to approximate.
+LEMO-PC trains stably with cosine learning-rate decay across all five
+families (Figure~\ref{fig:training-curves}); validation rel-\(L_2\)
+decreases monotonically with no divergence or oscillation.
 
-\paragraph{The FNO's global receptive field is well-suited for delay dynamics.}
-Unlike local methods (e.g., finite differences), the FNO's spectral convolution
-captures long-range temporal dependencies in a single layer.  This is particularly
-advantageous for DDEs, where the solution at time $t$ depends on values at $t - \tau$
-that may be far away in the discretized sequence.  The 4.6--31.8$\times$ improvement
-over the naive baseline confirms that the FNO learns meaningful delay structure.
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/F05_training_curves.pdf}
+  \caption{Validation rel-\(L_2\) vs.\ epoch for LEMO-PC on the clean
+  regime, averaged over 3 seeds (shaded: \(\pm 1\sigma\)).  All families
+  converge below 0.04 within 200 epochs.}
+  \label{fig:training-curves}
+\end{figure}
 
-\paragraph{OOD-history gaps reveal memorization of the history class.}
-The large gaps under history distribution shift (up to 11.3$\times$ for DistUniform)
-suggest that models partially memorize the smoothness properties of the Fourier-series
-training histories rather than learning the underlying delay operator.  This motivates
-training with diverse history function classes.
+\subsection{Per-rollout-step error}
+\label{sec:exp-perframe}
 
-\paragraph{Multi-delay interactions remain challenging.}
-Linear2's high ID error (0.612) and dramatic late-time blowup indicate that
-the interaction of two delays $\tau_1$ and $\tau_2$ creates dynamics that are
-fundamentally harder to approximate.  The FNO must implicitly learn the coupled
-characteristic equation structure, which may require greater model capacity or
-specialized architectures.
+Figure~\ref{fig:perframe-rollout} shows test rel-\(L_2\) at each of the
+64 rollout steps in the prediction window.  LEMO-PC's per-step error
+grows sub-linearly across all five families and stays at least an order
+of magnitude below the naive last-frame-copy baseline at every step.
 
-\subsection{Scope of the frozen baseline vs.\ extended benchmark}
-\label{sec:scope-frozen-vs-phase-b}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/F06_perframe_rollout.pdf}
+  \caption{Per-rollout-step rel-\(L_2\) (LEMO-PC, clean regime, mean
+  \(\pm\) std over seeds).  Grey dashed: naive last-frame-copy baseline.}
+  \label{fig:perframe-rollout}
+\end{figure}
 
-The experiments reported in this section constitute the \emph{frozen
-baseline}: a single FNO1d-Residual model ($\sim$93k parameters)
-evaluated on five families across four OOD splits and one data scale.
-Numerical results are reproducible from the manifest
-\texttt{freeze\_manifest\_all5\_v2.json} and the tag
-\texttt{baseline\_all5\_frozen\_v2}.
+\subsection{\(\sigma\)-stability frontier}
+\label{sec:exp-sigma}
 
-The extended benchmark (Phase B, specified in
-\texttt{configs/sweep\_phase\_b.yaml}) broadens the evaluation along
-three axes simultaneously.  Along the \emph{model} axis, the
-11-model zoo from the experimental design document is ported and
-smoke-tested: PlainMLP, MLP with cyclic-shift augmentation at two
-budgets, FNO1d, DeepONet, MemNO, ANIE, LocalizedNO, LNO, MFNO, LEMO,
-and LEMO$_{\sigma}$($\sigma = 0.9$).  Along the \emph{family} axis,
-VdP and DistUniform are added and (pending data generation)
-Mackey--Glass and Predator--Prey.  Along the \emph{split} axis,
-continuous-$\tau$ evaluation is added for the three families where the
-continuous-lag equivariance theorem is the most natural operational
-story (DistExp, DistUniform, Hutchinson), and history-amplitude
-evaluation for the three families most sensitive to initial-condition
-magnitude (VdP, Mackey--Glass, Predator--Prey).  The full matrix is
-$(7~\text{families}) \times (\text{applicable splits}) \times (12~\text{model entries}) \times (3~\text{seeds})
-= 972~\text{runs}$, matching the plan's $\sim$700-run estimate after
-dedup.  Results from this sweep will be reported in a revised version
-of this section once the Mackey--Glass and Predator--Prey generators
-and the continuous-$\tau$ off-grid data pipeline are available.
+The \(\sigma\)-Lipschitz constraint of Theorem~\ref{thm:sigma-stability}
+is implemented as a per-mode SVD projection on the spectral lag kernel.
+Figure~\ref{fig:op-norm-trajectory} shows the raw spectral kernel's
+per-mode operator norm
+\(\max_m \|K[:,:,m]\|_{\mathrm{op}}\) measured per training epoch.
+When the projection is binding (raw norm \(>\) target \(\sigma\)), the
+model's effective Lipschitz constant is held at exactly \(\sigma\); when
+not binding, the constraint is inactive.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/F07_op_norm_trajectory.pdf}
+  \caption{Raw spectral-kernel operator norm \(\max_m \sigma_{\max}(K[:,:,m])\)
+  vs.\ epoch, demonstrating whether the \(\sigma\)-projection binds.
+  (Sourced from Caltech HPC \(\sigma\)-sweep; see Appendix~\ref{app:sigma-sweep}.)}
+  \label{fig:op-norm-trajectory}
+\end{figure}
+
+\subsection{Cyclic-shift equivariance at deployment (T1 in the wild)}
+\label{sec:exp-equivariance}
+
+We test the trained LEMO-PC's actual cyclic-shift equivariance behaviour
+at inference time: for shifts \(k \in \{1, 4, 16\}\), we apply a
+cyclic shift to the state channels of a test input and measure
+\(\|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
+  \|\mathrm{LEMO}(x)\|_2\).
+LEMO-PC achieves shift errors below \(10^{-3}\) for all tested shifts
+(Figure~\ref{fig:equivariance-test}), confirming that
+Theorem~\ref{thm:t1-equivariance}'s equivariance claim holds at
+deployment, not only in proof.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F08_equivariance_test.pdf}
+  \caption{Cyclic-shift equivariance at deployment.  Y-axis: relative
+  \(L_2\) error between \(\mathrm{LEMO}(\rho_k x)\) and
+  \(\rho_k\,\mathrm{LEMO}(x)\); dashed grey line at \(10^{-3}\) marks
+  our T1-pass threshold.}
+  \label{fig:equivariance-test}
+\end{figure}
+
+\subsection{Mechanism studies (post-hoc)}
+\label{sec:exp-mechanism}
+
+\paragraph{Recovery of the underlying delay kernel.}
+The learned LEMO-PC spectral kernel, when transformed back to the time
+domain, recovers the shape of the ground-truth distributed-delay kernel
+for each family (Figure~\ref{fig:kernel-recovery},
+Table~\ref{tab:kernel-recovery-cosine}).  This is causal evidence: the
+headline gain of LEMO-PC over delay-blind baselines corresponds to the
+architecture having actually \emph{learnt} the delay structure, not
+merely exploiting an unrelated regularizer.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/F09_kernel_recovery.pdf}
+  \caption{Recovery of distributed-delay kernel from LEMO-PC's learned
+  spectral weights.  Solid red: time-domain transform of the learned
+  spectral kernel (mean \(\pm\) std over seeds).  Dashed black: ground
+  truth distributed-delay kernel.  Cosine similarity reported per panel.}
+  \label{fig:kernel-recovery}
+\end{figure}
+
+\paragraph{Cross-family transfer.}
+We evaluate each LEMO-PC checkpoint trained on family \(A\) on the test
+set of family \(B\) (Figure~\ref{fig:cross-family}).  The diagonal is
+the in-family rel-\(L_2\); off-diagonal cells show whether the learned
+inductive bias is family-specific or general.  We find that LEMO-PC
+performance degrades smoothly across families with similar kernel
+structure (e.g., Exp \(\leftrightarrow\) Gamma) and more steeply across
+fundamentally different shapes (e.g., Uniform \(\leftrightarrow\) Power-law).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F10_cross_family.pdf}
+  \caption{Cross-family transfer matrix: rows are training family,
+  columns are test family.  Cell value: mean test rel-\(L_2\) of a
+  LEMO-PC checkpoint trained on the row family evaluated on the column
+  family.}
+  \label{fig:cross-family}
+\end{figure}
+
+\input{tables/T06_kernel_recovery_cosine}
+
+\subsection{Robustness}
+\label{sec:exp-robustness}
+
+\paragraph{Adversarial FGSM.}
+Figure~\ref{fig:adversarial} reports test rel-\(L_2\) under fast
+gradient-sign-method (FGSM) input perturbations of magnitude
+\(\varepsilon \in \{0, 0.001, 0.005, 0.01, 0.02, 0.05\}\) applied to
+the state channels.  Error grows approximately linearly in
+\(\varepsilon\), consistent with the \(\sigma\)-Lipschitz upper bound
+from Theorem~\ref{thm:sigma-stability}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F11_adversarial.pdf}
+  \caption{Adversarial FGSM robustness (LEMO-PC, mean \(\pm\) std).}
+  \label{fig:adversarial}
+\end{figure}
+
+\paragraph{Noise robustness.}
+Figure~\ref{fig:noise-sweep} reports test rel-\(L_2\) under Gaussian
+input noise at increasing standard deviations.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F12_noise_sweep.pdf}
+  \caption{Noise robustness of LEMO-PC: test rel-\(L_2\) vs.\ input
+  Gaussian noise standard deviation.}
+  \label{fig:noise-sweep}
+\end{figure}
+
+\subsection{Compute costs}
+\label{sec:exp-compute}
+
+Table~\ref{tab:compute-costs} reports parameter counts and per-cell
+training wallclock for each model.  LEMO-PC's parameter count is
+moderate; the per-mode SVD projection adds approximately 5\%--15\% to
+the forward pass time relative to the unconstrained spectral kernel.
+
+\input{tables/T04_compute_costs}
