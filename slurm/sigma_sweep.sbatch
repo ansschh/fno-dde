@@ -54,4 +54,15 @@ python3 -u scripts/train_apebench_smoke.py \
   --output_dir "outputs/sigma_${SIGMA}/raw/${FAM}/clean/lemo_pc_nd/s${SEED}" \
   --residual_anchor --sigma $SIGMA
 
-echo "[$(date)] Job $idx done"
+echo "[$(date)] Job $idx training done — running post-hoc captures..."
+
+# Post-training capture pass: per-frame metrics, viz samples, kernel
+# snapshot, residuals, long-rollout norms, FFT residual energy, and
+# equivariance test.  Idempotent (skips already-captured artifacts).
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
+python3 -u scripts/capture_paper_artifacts.py \
+  --layer_root "outputs/sigma_${SIGMA}" \
+  --data_dir data_dde_pde \
+  --device cuda || echo "WARN: capture failed for cell $idx"
+
+echo "[$(date)] Job $idx done (training + captures)"

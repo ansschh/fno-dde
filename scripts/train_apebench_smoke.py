@@ -56,6 +56,35 @@ def evaluate(model, loader, device):
     return float(np.mean(np.concatenate(rel_l2_list)))
 
 
+def _compute_weight_norm(model: torch.nn.Module) -> float:
+    """Total L2 norm of trainable parameters (handles complex parameters)."""
+    with torch.no_grad():
+        sq = sum(float((p.detach().abs() ** 2).sum().item())
+                 for p in model.parameters() if p.requires_grad)
+    return float(sq ** 0.5)
+
+
+def _compute_op_norm_max(model: torch.nn.Module) -> float:
+    """Largest per-mode operator-norm sigma_max(K[:,:,m]) over all spectral
+    lag layers (FiLMLagSpectralND.weights, complex tensor shape (in, out, modes)).
+    Returns 0.0 if no such layers found.  Proves whether σ-projection is binding."""
+    max_op = 0.0
+    with torch.no_grad():
+        for mod in model.modules():
+            w = getattr(mod, "weights", None)
+            if w is None or not torch.is_complex(w) or w.dim() != 3:
+                continue
+            Km = w.permute(2, 0, 1).contiguous()  # (modes, in, out)
+            try:
+                S = torch.linalg.svdvals(Km)
+                cur = float(S.max().item())
+                if cur > max_op:
+                    max_op = cur
+            except Exception:
+                pass
+    return float(max_op)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", default="data_apebench")
@@ -140,13 +169,21 @@ def main() -> None:
 
     out_dir = Path(args.output_dir) / args.family / args.regime / args.model / f"s{args.seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    history = {"train_loss": [], "val_rel_l2": [], "test_rel_l2": []}
+    history = {
+        "train_loss": [], "val_rel_l2": [], "test_rel_l2": [],
+        "grad_norm": [], "weight_norm": [], "op_norm_max": [],
+        "lr": [], "wall_per_epoch_s": [], "peak_mem_gb": [],
+    }
     best_val = float("inf")
     t0 = time.time()
     for epoch in range(args.epochs):
         model.train()
         running_loss = 0.0
+        grad_norm_acc = 0.0
         n_steps = 0
+        epoch_t0 = time.time()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats()
         for batch in train_loader:
             x = batch["input"].to(device).float()
             y_target = batch["target"].to(device).float()
@@ -159,7 +196,8 @@ def main() -> None:
             loss = (diff ** 2).sum() / denom
             opt.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            gn = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            grad_norm_acc += float(gn) if gn is not None else 0.0
             opt.step()
             running_loss += loss.item()
             n_steps += 1
@@ -168,8 +206,17 @@ def main() -> None:
         val_rl2 = evaluate(model, val_loader, device)
         history["train_loss"].append(avg_loss)
         history["val_rel_l2"].append(val_rl2)
+        history["grad_norm"].append(grad_norm_acc / max(n_steps, 1))
+        history["weight_norm"].append(_compute_weight_norm(model))
+        history["op_norm_max"].append(_compute_op_norm_max(model))
+        history["lr"].append(float(opt.param_groups[0]["lr"]))
+        history["wall_per_epoch_s"].append(time.time() - epoch_t0)
+        history["peak_mem_gb"].append(
+            float(torch.cuda.max_memory_allocated() / 1e9) if device.type == "cuda" else 0.0)
         elapsed = time.time() - t0
-        print(f"[ep {epoch+1:>3d}/{args.epochs}]  train_loss={avg_loss:.4e}  val_relL2={val_rl2:.4f}  t={elapsed:.0f}s")
+        print(f"[ep {epoch+1:>3d}/{args.epochs}]  train_loss={avg_loss:.4e}  "
+              f"val_relL2={val_rl2:.4f}  grad={history['grad_norm'][-1]:.2e}  "
+              f"opK={history['op_norm_max'][-1]:.3f}  t={elapsed:.0f}s")
         if val_rl2 < best_val:
             best_val = val_rl2
             torch.save({"model_state_dict": model.state_dict(),
@@ -184,11 +231,20 @@ def main() -> None:
     print(f"\n=== FINAL test relL2 = {test_rl2:.4f} ===")
 
     json.dump(history, open(out_dir / "history.json", "w"), indent=2)
+    final_op_norm = _compute_op_norm_max(model)
     json.dump({"family": args.family, "model": args.model,
                 "test_rel_l2_mean": test_rl2,
                 "best_val_rel_l2": best_val,
                 "params": n_params,
-                "wall_seconds": time.time() - t0},
+                "wall_seconds": time.time() - t0,
+                "sigma": (None if args.sigma.lower() in ("none","null","") else float(args.sigma)),
+                "final_op_norm_max": final_op_norm,
+                "n_epochs": args.epochs,
+                "peak_mem_gb_overall": (max(history["peak_mem_gb"]) if history["peak_mem_gb"] else 0.0),
+                "seed": args.seed,
+                "regime": args.regime,
+                "residual_anchor": bool(args.residual_anchor),
+                "config": config["model"]},
               open(out_dir / "test_results.json", "w"), indent=2)
 
 
