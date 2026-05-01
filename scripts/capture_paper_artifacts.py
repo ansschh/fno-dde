@@ -33,8 +33,12 @@ def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
     from train.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
+    # Read residual_anchor from the saved training config; fall back to True
+    # because every v2/sigma-sweep cell was trained with --residual_anchor.
+    # Older ckpts that pre-date the flag-saving change won't have this key.
+    ra = bool(cfg.get("residual_anchor", True))
     _, _, test_loader = create_apebench_dataloaders(
-        data_dir, family, batch_size=8, residual_anchor=False, seed=42)
+        data_dir, family, batch_size=8, residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))
     in_ch = sample["input"].shape[-1]
     out_ch = sample["target"].shape[-1]

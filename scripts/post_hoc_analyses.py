@@ -57,13 +57,17 @@ FAMS = ["dist_exp_rd_2d", "dist_gaussian_rd_2d", "dist_gamma_rd_2d",
 # -------------------- shared loader --------------------
 
 def load_cell(ckpt_path: Path, data_dir: str, family: str, device: str):
-    """Returns (model, test_loader, train_loader, cfg)."""
+    """Returns (model, test_loader, train_loader, cfg).  Reads residual_anchor
+    from the ckpt config (fallback True — every v2/sigma-sweep cell was
+    trained with --residual_anchor).  Required so the model sees the same
+    input distribution at eval as it did during training."""
     from datasets.apebench_dataset import create_apebench_dataloaders
     from train.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
+    ra = bool(cfg.get("residual_anchor", True))
     train_loader, _, test_loader = create_apebench_dataloaders(
-        data_dir, family, batch_size=4, residual_anchor=False, seed=42)
+        data_dir, family, batch_size=4, residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))
     in_ch = sample["input"].shape[-1]
     out_ch = sample["target"].shape[-1]
