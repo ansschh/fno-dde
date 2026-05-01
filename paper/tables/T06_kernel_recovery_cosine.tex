@@ -1,0 +1,19 @@
+\begin{table}[h]
+\centering
+\caption{Cosine similarity between LEMO-PC's learned spectral kernel
+(transformed back to the time domain) and the analytic ground-truth
+distributed-delay kernel for each family.  Mean $\pm$ std over $n$
+LEMO-PC cells (3 regimes $\times$ 3 seeds).}
+\label{tab:kernel-recovery-cosine}
+\begin{tabular}{lcr}
+\toprule
+Family & Cosine similarity (mean $\pm$ std) & $n$ \\
+\midrule
+exp & 0.746 $\pm$ 0.037 & 9 \\
+gaussian & 0.741 $\pm$ 0.009 & 9 \\
+gamma & 0.917 $\pm$ 0.006 & 9 \\
+uniform & 0.693 $\pm$ 0.013 & 9 \\
+powerlaw & 0.508 $\pm$ 0.015 & 9 \\
+\bottomrule
+\end{tabular}
+\end{table}

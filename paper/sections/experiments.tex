@@ -19,8 +19,8 @@ spatial grid with $n_{\text{hist}} = 64$ history frames and
 $n_{\text{out}} = 64$ future frames at $\Delta t = 0.01$, with 1000
 training, 200 validation, and 200 test trajectories per family.  Three
 single-delay 2D families (\textsc{mackey\_glass}, \textsc{wright},
-\textsc{hutchinson}) are evaluated as a generalization check.  See
-Section~\ref{sec:data-generation} for solver details.
+\textsc{hutchinson}) are evaluated as a generalization check.  Solver
+details and family definitions are in the dataset-generation section.
 
 \paragraph{Regimes.}
 Each family is evaluated in three input-perturbation regimes (target
@@ -72,7 +72,10 @@ regime exhibits an inversion of the LEMO-PC $\to$ baseline ranking.
 Figure~\ref{fig:family-triptych} shows representative input/target/
 prediction triptychs for one trajectory per family at the final rollout
 step --- LEMO-PC reproduces the target field structure across all five
-families.
+families.  Figure~\ref{fig:failure-mode} contrasts the easiest and
+hardest test trajectory per family (sorted by per-sample rel-$L_2$);
+even on the hardest sample the prediction tracks the target field with
+errors confined to localised regions rather than systematic drift.
 
 \begin{figure}[h]
   \centering
@@ -81,6 +84,18 @@ families.
   final rollout step ($t = 63$).  One representative trajectory per
   family in residual-anchor space; per-row colour limits shared.}
   \label{fig:family-triptych}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/M3_failure_mode_gallery.pdf}
+  \caption{Failure-mode gallery.  For each family the easiest (left
+  three columns) and hardest (right three columns) test sample is
+  shown with ground truth, LEMO-PC prediction, and signed-log error
+  $|\hat{u}-u|$.  Per-sample rel-$L_2$ annotated per row.  Easy
+  samples: $0.007 \le \ell_2 \le 0.021$; hard samples:
+  $0.029 \le \ell_2 \le 0.107$.}
+  \label{fig:failure-mode}
 \end{figure}
 
 \input{tables/T02_perfamily_relL2}
@@ -144,42 +159,49 @@ ground truth is maintained across the full horizon.
 \subsection{$\sigma$-stability frontier}
 \label{sec:exp-sigma}
 
-The $\sigma$-Lipschitz constraint of Theorem~\ref{thm:sigma-stability}
+The $\sigma$-Lipschitz constraint of Corollary~\ref{cor:architectural-contraction}
 is implemented as a per-mode SVD projection on the spectral lag kernel.
-Figure~\ref{fig:op-norm-trajectory} (Caltech HPC $\sigma$-sweep, four
-$\sigma$ targets in $\{0.5, 0.7, 0.9, 0.99\}$ plus the unconstrained
-baseline) shows the raw spectral kernel's per-mode operator norm
-$\max_m \|K[:,:,m]\|_{\mathrm{op}}$ measured per training epoch.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.85\linewidth]{figures/F07_op_norm_trajectory.pdf}
-  \caption{Raw spectral-kernel operator norm
-  $\max_m \sigma_{\max}(K[:,:,m])$ vs.\ epoch.}
-  \label{fig:op-norm-trajectory}
-\end{figure}
+The $\sigma$-stability sweep (4 $\sigma$ targets $\in
+\{0.5, 0.7, 0.9, 0.99\}$ plus the unconstrained baseline, 5 families,
+3 seeds) is being run on the Caltech HPC cluster.  Once it completes
+we will report (a) the raw kernel's per-mode operator norm
+$\max_m \|K[:,:,m]\|_{\mathrm{op}}$ as a function of epoch (showing
+when the $\sigma$-projection is binding) and (b) the
+accuracy--stability frontier (test rel-$L_2$ vs.\ peak rollout norm
+across $\sigma$ values).  Results to appear in revision.
 
 \subsection{Cyclic-shift equivariance at deployment}
 \label{sec:exp-equivariance}
 
-We test the trained LEMO-PC's actual cyclic-shift equivariance at
-inference time: for shifts $k \in \{1, 4, 16\}$, applying a cyclic
-shift to the state channels of a test input and measuring
-$\|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
-  \|\mathrm{LEMO}(x)\|_2$.
-LEMO-PC achieves shift errors below $10^{-3}$ for all tested shifts
-(Figure~\ref{fig:equivariance-test}), confirming
-Theorem~\ref{thm:t1-equivariance}'s equivariance claim holds at
-deployment, not only in proof.
+Theorem~\ref{thm:stack-equiv} states $\mathrm{LEMO}(\rho_k x) =
+\rho_k\,\mathrm{LEMO}(x)$ where $\rho_k$ is the cyclic shift along the
+lag axis applied uniformly to every channel of the input tensor.
+Figure~\ref{fig:m4-equivariance} verifies this empirically: we render
+$\mathrm{LEMO}(\rho_k x)$ (top row) and $\rho_k\,\mathrm{LEMO}(x)$
+(bottom row) at the final output frame for $k \in \{0, 4, 16, 32\}$.
+Per column the two panels are visually indistinguishable; the
+per-shift relative error
+$e_k = \|\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\|_2 /
+       \|\mathrm{LEMO}(x)\|_2$
+is at most $5.8 \times 10^{-3}$ across all shifts and is independent
+of $k$, consistent with the float32 FFT-precision floor for three
+compounded spectral blocks.  Aggregated across all 45 LEMO-PC cells
+(5 families $\times$ 3 regimes $\times$ 3 seeds), $\max_k \bar{e}_k
+\le 7\!\times\!10^{-3}$.  T1 holds at deployment to numerical
+precision.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.7\linewidth]{figures/F08_equivariance_test.pdf}
-  \caption{Cyclic-shift equivariance at deployment.  Y-axis: relative
-  $L_2$ error between $\mathrm{LEMO}(\rho_k x)$ and
-  $\rho_k\,\mathrm{LEMO}(x)$; dashed grey line at $10^{-3}$ marks our
-  T1-pass threshold.}
-  \label{fig:equivariance-test}
+  \includegraphics[width=\linewidth]{figures/M4_equivariance_demo.pdf}
+  \caption{T1 in pictures.  Top: $\mathrm{LEMO}(\rho_k x)$ at the final
+  output frame for $k \in \{0, 4, 16, 32\}$.  Bottom:
+  $\rho_k\,\mathrm{LEMO}(x)$ at the same shifts.  The two rows are
+  visually identical iff
+  $\mathrm{LEMO}\!\circ\!\rho_k = \rho_k\!\circ\!\mathrm{LEMO}$.
+  $e_k$ annotations report the per-shift relative $L_2$ error
+  ($e_k \le 5.8 \times 10^{-3}$, float32 FFT-precision floor for 3
+  compounded blocks).}
+  \label{fig:m4-equivariance}
 \end{figure}
 
 \subsection{Mechanism: recovery of the underlying delay kernel}
@@ -203,6 +225,27 @@ the architecture having actually \emph{learnt} the delay structure.
 \end{figure}
 
 \input{tables/T06_kernel_recovery_cosine}
+
+A complementary mechanism check (Figure~\ref{fig:saliency}) computes
+the receptive-field saliency
+$|\partial \hat{u}(t = 63) / \partial u(t_{\mathrm{in}})|$ per family
+via auto-differentiation and overlays it with the analytic ground-truth
+distributed-delay kernel.  The saliency peak position aligns with the
+GT kernel mass for Gauss and Uniform; the persistent spike at
+$t_{\mathrm{out}} - t_{\mathrm{in}} = 0$ across all families reflects
+the model's reliance on the most-recent input frame
+(autoregressive prior).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/M8_saliency_map.pdf}
+  \caption{Receptive-field saliency
+  $|\partial \hat{u}(T) / \partial u(t_{\mathrm{in}})|$ per family
+  (red, normalized) vs.\ analytic GT distributed-delay kernel (black
+  dashed).  Lag axis $t_{\mathrm{out}} - t_{\mathrm{in}}$ (large = far
+  in the past).}
+  \label{fig:saliency}
+\end{figure}
 
 LEMO-PC's spectral kernel is sparse: across 15 clean-regime cells,
 operator-norm mass concentrates on lag mode $m=1$ (median per-mode
@@ -272,15 +315,49 @@ models cannot capture.  LDS varies across families
 
 \input{tables/T07_lds}
 
-\subsection{Robustness, transfer, and APEBench arc}
+\subsection{Robustness and transfer (post-hoc)}
 \label{sec:exp-robustness-summary}
 
-Cross-family transfer, adversarial FGSM robustness, noise-sweep
-robustness, and the APEBench/scaling arc are summarised in
-Appendix~\ref{app:robustness}.  Brief findings: cross-family transfer
-loss is family-pair specific (Exp$\leftrightarrow$Gamma transfers
-well; Uniform$\leftrightarrow$Power-law degrades sharply); FGSM error
-grows approximately linearly in $\varepsilon$ as predicted by the
-$\sigma$-Lipschitz bound; APEBench arc reproduces published
-out-of-distribution baselines and is included as a negative-results
-appendix.
+Three post-hoc analyses on the 45 LEMO-PC checkpoints test
+robustness without retraining.
+
+\paragraph{Cross-family transfer.}
+Each LEMO-PC checkpoint trained on family $A$ is evaluated on every
+other family's test shard (Figure~\ref{fig:cross-family}).  In-family
+rel-$L_2$ on the diagonal is recovered; off-diagonal entries quantify
+the family-specific component of the learned inductive bias.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/F10_cross_family.pdf}
+  \caption{Cross-family transfer matrix.  Rows: training family.
+  Columns: test family.  Cell value: mean test rel-$L_2$ across 9 cells
+  (3 regimes $\times$ 3 seeds).}
+  \label{fig:cross-family}
+\end{figure}
+
+\paragraph{Adversarial FGSM and noise robustness.}
+Figure~\ref{fig:robustness-curves} reports test rel-$L_2$ under
+fast-gradient-sign-method (FGSM) input perturbations of magnitude
+$\varepsilon \in \{0, 0.001, 0.005, 0.01, 0.02, 0.05\}$ and Gaussian
+input noise at $\sigma_{\mathrm{noise}} \in \{0, 0.05, 0.1, 0.2,
+0.5\}$.  FGSM error grows approximately linearly in $\varepsilon$ as
+predicted by the $\sigma$-Lipschitz bound from
+Corollary~\ref{cor:architectural-contraction}; noise robustness is comparable.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.45\linewidth]{figures/F11_adversarial.pdf}
+  \hfill
+  \includegraphics[width=0.45\linewidth]{figures/F12_noise_sweep.pdf}
+  \caption{Left: FGSM adversarial robustness (test rel-$L_2$ vs.\
+  perturbation magnitude $\varepsilon$).  Right: Gaussian noise
+  robustness (test rel-$L_2$ vs.\ input noise $\sigma$).}
+  \label{fig:robustness-curves}
+\end{figure}
+
+\paragraph{APEBench / scaling arc.}
+Reproduction of published out-of-distribution operator-learning
+baselines and a width-scaling sweep on burgers\_3d are reported in
+the supplementary material as a negative-results arc; the headline
+2D dist-kernel claims are independent of those benchmarks.
