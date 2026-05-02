@@ -143,7 +143,9 @@ def main():
     # ------------------------------------------------------------------
     # Two-panel zoom: left = leading boundary (first ZOOM frames),
     # right = trailing boundary (last ZOOM frames).
-    ZOOM = 10  # show first/last 10 frames for clear boundary visibility
+    # Show first/last 16 frames so the boundary→interior transition is fully visible
+    # (FNO+FiLM elevation extends past the b=4 cutoff).
+    ZOOM = 16
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.0), sharey=True)
     T = max(d["T"] for d in agg.values())
 
