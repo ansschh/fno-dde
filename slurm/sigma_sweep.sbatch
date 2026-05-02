@@ -44,6 +44,12 @@ SEED=${SEEDS[$seed_idx]}
 
 echo "[$(date)] Job $idx: sigma=$SIGMA family=$FAM seed=$SEED"
 
+RESULT_PATH="outputs/sigma_${SIGMA}/raw/${FAM}/clean/lemo_pc_nd/s${SEED}/test_results.json"
+if [ -f "$RESULT_PATH" ]; then
+  echo "[$(date)] Job $idx: SKIP (test_results.json already present)"
+  exit 0
+fi
+
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
 python3 -u scripts/train_apebench_smoke.py \
   --family $FAM --model lemo_pc_nd --regime clean \
@@ -55,15 +61,7 @@ python3 -u scripts/train_apebench_smoke.py \
   --output_dir "outputs/sigma_${SIGMA}/raw" \
   --residual_anchor --sigma $SIGMA
 
-echo "[$(date)] Job $idx training done — running post-hoc captures..."
+# Post-hoc captures disabled to fit Caltech disk quota.
+# Run scripts/capture_paper_artifacts.py locally on downloaded checkpoints instead.
 
-# Post-training capture pass: per-frame metrics, viz samples, kernel
-# snapshot, residuals, long-rollout norms, FFT residual energy, and
-# equivariance test.  Idempotent (skips already-captured artifacts).
-CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
-python3 -u scripts/capture_paper_artifacts.py \
-  --layer_root "outputs/sigma_${SIGMA}" \
-  --data_dir data_dde_pde \
-  --device cuda || echo "WARN: capture failed for cell $idx"
-
-echo "[$(date)] Job $idx done (training + captures)"
+echo "[$(date)] Job $idx done."

@@ -51,6 +51,13 @@ SEED=${SEEDS[$seed_idx]}
 
 echo "[$(date)] Job $idx: model=$MODEL family=$FAM regime=$REGIME seed=$SEED"
 
+# Skip if this cell already completed (keeps idempotent resubmits cheap).
+RESULT_PATH="outputs/film_ablation/raw/${FAM}/${REGIME}/${MODEL}/s${SEED}/test_results.json"
+if [ -f "$RESULT_PATH" ]; then
+  echo "[$(date)] Job $idx: SKIP (test_results.json already present at $RESULT_PATH)"
+  exit 0
+fi
+
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
 python3 -u scripts/train_apebench_smoke.py \
   --family $FAM --model $MODEL --regime $REGIME \
@@ -62,12 +69,7 @@ python3 -u scripts/train_apebench_smoke.py \
   --output_dir "outputs/film_ablation/raw" \
   --residual_anchor
 
-echo "[$(date)] Job $idx training done -- running post-hoc captures..."
-
-CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
-python3 -u scripts/capture_paper_artifacts.py \
-  --layer_root outputs/film_ablation \
-  --data_dir data_dde_pde \
-  --device cuda || echo "WARN: capture failed for cell $idx"
+# Post-hoc captures disabled to fit Caltech disk quota.
+# Run scripts/capture_paper_artifacts.py locally on downloaded checkpoints instead.
 
 echo "[$(date)] Job $idx done."
