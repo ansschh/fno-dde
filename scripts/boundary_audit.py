@@ -141,8 +141,15 @@ def main():
     # Figure: aggregate per-position rel-L2 for each model + boundary shading
     # + ratio annotation per model.
     # ------------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    # Broken-axis layout: wide left for leading boundary (t=0..ZOOM-1),
+    # narrow middle for interior, wide right for trailing boundary.
+    # The interior region carries no signal; we squeeze it and put diagonal
+    # break marks on the inner spines.
+    ZOOM = 16
     T = max(d["T"] for d in agg.values())
+    fig, (axL, axR) = plt.subplots(
+        1, 2, figsize=(10.5, 4.2), sharey=True,
+        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.04})
 
     # Skip "broken" models (interior_mean above naive-copy floor of ~1.0).
     BROKEN_THRESHOLD = 0.5
@@ -157,27 +164,48 @@ def main():
         color = MODEL_COLOR[model]
         m = np.array(d["mean_per_t"])
         s = np.array(d["std_per_t"])
-        ts = np.arange(len(m))
+        T_m = len(m)
+        ts = np.arange(T_m)
         label = f"{MODEL_LABEL[model]} (b/i = {d['ratio']:.2f})"
-        ax.plot(ts, m, color=color, lw=1.8, label=label)
-        ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
-                         color=color, alpha=0.15, linewidth=0)
+        for ax in (axL, axR):
+            ax.plot(ts, m, color=color, lw=1.8,
+                    label=label if ax is axL else None)
+            ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
+                             color=color, alpha=0.15, linewidth=0)
         plotted.append(model)
 
-    # Boundary shading on the single axis
-    ax.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
-                label=f"boundary (t<{B} or t≥T-{B})")
-    ax.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
-    ax.set_xlim(-0.5, T - 0.5)
-    ax.set_xlabel("rollout step $t$")
-    ax.set_ylabel(r"rel-$L_2$ (mean over cells)")
-    ax.set_yscale("log")
-    ax.set_title("Per-position boundary audit", fontsize=11)
-    ax.grid(linestyle=":", alpha=0.4, which="both")
-    for sp in ("top", "right"):
-        ax.spines[sp].set_visible(False)
-    ax.legend(loc="lower right", fontsize=9, framealpha=0.9, frameon=False)
-    fig.tight_layout()
+    # Boundary shading
+    axL.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
+                 label=f"boundary (t<{B} or t≥T-{B})")
+    axR.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+
+    # X-axis windows: left shows the leading boundary, right shows the trailing.
+    axL.set_xlim(-0.5, ZOOM - 0.5)
+    axR.set_xlim(T - ZOOM - 0.5, T - 0.5)
+
+    # Hide inner spines and add diagonal break marks
+    axL.spines["right"].set_visible(False)
+    axR.spines["left"].set_visible(False)
+    axR.tick_params(axis="y", left=False, labelleft=False)
+    axL.spines["top"].set_visible(False); axR.spines["top"].set_visible(False)
+
+    d_break = 0.012  # break-mark size
+    kwargs = dict(transform=axL.transAxes, color="black",
+                   clip_on=False, lw=1.0)
+    axL.plot((1 - d_break, 1 + d_break), (-d_break, +d_break), **kwargs)
+    axL.plot((1 - d_break, 1 + d_break), (1 - d_break, 1 + d_break), **kwargs)
+    kwargs.update(transform=axR.transAxes)
+    axR.plot((-d_break, +d_break), (-d_break, +d_break), **kwargs)
+    axR.plot((-d_break, +d_break), (1 - d_break, 1 + d_break), **kwargs)
+
+    axL.set_ylabel(r"rel-$L_2$ (mean over cells)")
+    fig.text(0.5, 0.01, "rollout step $t$", ha="center", fontsize=11)
+    for ax in (axL, axR):
+        ax.set_yscale("log")
+        ax.grid(linestyle=":", alpha=0.4, which="both")
+    fig.suptitle("Per-position boundary audit", fontsize=12, y=0.99)
+    axL.legend(loc="lower right", fontsize=9, framealpha=0.9, frameon=False)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.97])
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_FIG, bbox_inches="tight")
     fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150, bbox_inches="tight")
