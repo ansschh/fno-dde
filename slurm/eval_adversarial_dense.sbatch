@@ -40,6 +40,9 @@ ROOTS=(
   "outputs/final_baselines"
   "outputs/memory_aware_caltech"
   "outputs/memno_ffno_caltech"
+  "outputs/film_ablation"
+  "outputs/memory_aware"
+  "outputs/memno_ffno"
 )
 
 echo "[$(date)] adv-dense for family=$FAM"
