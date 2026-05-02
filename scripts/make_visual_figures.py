@@ -111,25 +111,32 @@ def fig_v02_rollout_sequence(fam_pick="dist_exp_rd_2d", t_steps=(0, 16, 32, 48, 
     d = load_viz(fam_pick)
     if d is None:
         return None
-    y = d["target"][0]      # (T, *spatial, C)
+    y = d["target"][0]      # (T_total, *spatial, C) where T_total = n_hist + n_out (typically 128 = 64+64)
     yhat = d["pred"][0]
     T = y.shape[0]
-    t_steps = [t for t in t_steps if t < T]
+    # Plot FORECAST frames, not history. Pred is meaningful only on the future
+    # half (loss is masked to future during training); the history half of pred
+    # is unconstrained model output and should not be displayed.
+    n_hist = T // 2
+    t_abs = [n_hist + t for t in t_steps if (n_hist + t) < T]
+    t_labels = [t for t in t_steps if (n_hist + t) < T]
+    if not t_abs:
+        return None
     if not t_steps:
         return None
-    fig, axes = plt.subplots(2, len(t_steps),
-                              figsize=(2.0 * len(t_steps), 4.2),
+    fig, axes = plt.subplots(2, len(t_abs),
+                              figsize=(2.0 * len(t_abs), 4.2),
                               gridspec_kw={"wspace": 0.05, "hspace": 0.1})
-    if len(t_steps) == 1:
+    if len(t_abs) == 1:
         axes = axes.reshape(2, 1)
-    vmax = max(np.abs(y[t, ..., 0]).max() for t in t_steps)
-    vmax = max(vmax, max(np.abs(yhat[t, ..., 0]).max() for t in t_steps))
-    for j, t in enumerate(t_steps):
+    vmax = max(np.abs(y[t, ..., 0]).max() for t in t_abs)
+    vmax = max(vmax, max(np.abs(yhat[t, ..., 0]).max() for t in t_abs))
+    for j, (t, lbl) in enumerate(zip(t_abs, t_labels)):
         for i in range(2):
             axes[i, j].set_xticks([]); axes[i, j].set_yticks([])
         axes[0, j].imshow(y[t, ..., 0], cmap="RdBu_r", vmin=-vmax, vmax=vmax)
         axes[1, j].imshow(yhat[t, ..., 0], cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[0, j].set_title(f"t={t}", fontsize=10)
+        axes[0, j].set_title(f"t={lbl}", fontsize=10)
     axes[0, 0].set_ylabel("ground truth", rotation=0, ha="right", va="center", fontsize=10)
     axes[1, 0].set_ylabel("LEMO-PC pred", rotation=0, ha="right", va="center", fontsize=10)
     fig.suptitle(f"Rollout sequence: {FAM_LABELS[fam_pick]} family", fontsize=11)
