@@ -37,7 +37,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
 EXT = REPO / "extracted"
-FIG_DIR = REPO / "paper" / "figures"
+FIG_DIR = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 STATS_PATH = REPO / "paper" / "stats" / "paired_permutation.json"
 

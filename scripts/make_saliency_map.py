@@ -32,7 +32,7 @@ import torch
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
-FIG = REPO / "paper" / "figures"
+FIG = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG.mkdir(parents=True, exist_ok=True)
 BASE = REPO / "extracted_lemo_pc" / "outputs" / "dist_kernel_v2_p1" / "raw"
 

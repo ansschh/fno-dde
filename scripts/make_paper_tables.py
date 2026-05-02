@@ -162,12 +162,13 @@ def t01_headline(stats: dict):
     """Headline: % impr / Hedges g / p-value / CI per baseline comparison."""
     if not stats:
         return None
-    keys = [k for k in ("FNO", "MarkovFNO", "WindFNO", "UNet", "LEMO_ND_ablation")
+    keys = [k for k in ("FNO", "MarkovFNO", "WindFNO", "MemNO", "FFNO", "UNet", "LEMO_ND_ablation")
             if k in stats]
     if not keys:
         return None
     label_map = {"FNO": "FNO", "MarkovFNO": "Markov-FNO",
-                 "WindFNO": "Window-FNO", "UNet": "UNet",
+                 "WindFNO": "Window-FNO", "MemNO": "MemNO",
+                 "FFNO": "F-FNO", "UNet": "UNet",
                  "LEMO_ND_ablation": "LEMO (no FiLM)"}
     rows = []
     for k in keys:
@@ -180,7 +181,7 @@ def t01_headline(stats: dict):
         rows.append((label_map[k], impr, ci, g, p_str, a["n_paired_cells"]))
     body = ["\\begin{tabular}{lccccr}",
             r"\toprule",
-            r"Comparison & \% improvement & 95\% CI & Hedges $g$ & $p$-value & $n$ \\",
+            r"Comparison & \% improvement & 95\% CI & paired Hedges $g$ & $p$-value & $n$ \\",
             r"\midrule"]
     for label, impr, ci, g, p, n in rows:
         body.append(f"vs.\\ {label} & {impr:.1f} & [{ci[0]:.1f}, {ci[1]:.1f}] & "
@@ -188,10 +189,15 @@ def t01_headline(stats: dict):
     body += [r"\bottomrule",
              r"\end{tabular}"]
     s = _wrap_table(body,
-                    caption=("LEMO-PC vs.\\ each baseline: percent improvement "
-                             "in test rel-$L_2$, paired-permutation $p$-value, "
-                             "Hedges $g$, and bootstrap 95\\% CI across "
-                             "$n=45$ paired cells."),
+                    caption=("LEMO-PC vs.\\ each baseline: percent improvement in "
+                             "test rel-$L_2$, paired-permutation $p$-value, paired "
+                             "Hedges $g = \\bar{(b-a)}/\\mathrm{std}(b-a)$, and "
+                             "bootstrap 95\\% CI.  $n=45$ paired cells (5 families "
+                             "$\\times$ 3 regimes $\\times$ 3 seeds) for FNO, "
+                             "Markov-FNO, Window-FNO, UNet, and the LEMO "
+                             "no-FiLM ablation; $n=15$ (clean regime only) for "
+                             "MemNO and F-FNO since the Pod-3 Phase-A sweep "
+                             "covered the clean regime only."),
                     label="tab:headline-per-baseline")
     out = TABLE_DIR / "T01_headline_per_baseline.tex"
     out.write_text("\n".join(s))

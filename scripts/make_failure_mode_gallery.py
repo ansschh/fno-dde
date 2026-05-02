@@ -27,7 +27,7 @@ from matplotlib.colors import SymLogNorm
 import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
-FIG = REPO / "paper" / "figures"
+FIG = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG.mkdir(parents=True, exist_ok=True)
 BASE = REPO / "extracted" / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw"
 

@@ -37,7 +37,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
 EXT = REPO / "extracted"
-FIG = REPO / "paper" / "figures"
+FIG = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG.mkdir(parents=True, exist_ok=True)
 
 FAMS = ["dist_exp_rd_2d", "dist_gaussian_rd_2d", "dist_gamma_rd_2d",
