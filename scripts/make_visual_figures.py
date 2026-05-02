@@ -243,9 +243,19 @@ def fig_v05_kernel_recovery():
             continue
         K = re + 1j * d[im_key]
         in_ch, out_ch, M = K.shape
-        L = 2 * (M - 1) if M > 1 else M
-        K_t = np.fft.irfft(K, n=L, axis=-1)         # (in, out, L)
-        K_amp = np.abs(K_t).mean(axis=(0, 1))        # (L,)
+        # K is the TRUNCATED spectral kernel: first M modes of an L_time-long
+        # signal, NOT the full spectrum of a length-(2M-2) signal. To recover
+        # the time-domain kernel, pad K to the full rfft length L_time//2+1
+        # and irfft to length L_time. n_total=128 matches training (n_hist+n_out
+        # at 64+64); kernel only depends on lag axis length, not spatial.
+        L_time = 128
+        n_modes_full = L_time // 2 + 1
+        K_full = np.zeros((in_ch, out_ch, n_modes_full), dtype=K.dtype)
+        n_keep = min(M, n_modes_full)
+        K_full[..., :n_keep] = K[..., :n_keep]
+        K_t = np.fft.irfft(K_full, n=L_time, axis=-1)  # (in, out, L_time)
+        K_amp = np.abs(K_t).mean(axis=(0, 1))           # (L_time,)
+        L = L_time   # downstream uses L for the GT-sampling axis
         # Ground truth shape (normalized).
         t = np.arange(L) / max(L - 1, 1)
         if fam.startswith("dist_exp"):
