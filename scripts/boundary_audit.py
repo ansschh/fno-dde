@@ -141,17 +141,10 @@ def main():
     # Figure: aggregate per-position rel-L2 for each model + boundary shading
     # + ratio annotation per model.
     # ------------------------------------------------------------------
-    # Two-panel zoom: left = leading boundary (first ZOOM frames),
-    # right = trailing boundary (last ZOOM frames).
-    # Show first/last 16 frames so the boundary→interior transition is fully visible
-    # (FNO+FiLM elevation extends past the b=4 cutoff).
-    ZOOM = 16
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.0), sharey=True)
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
     T = max(d["T"] for d in agg.values())
 
-    # Skip "broken" models (interior_mean above naive-copy floor of ~1.0) —
-    # the boundary/interior ratio metric is meaningless for a model that
-    # doesn't learn. Currently only excludes lemo_nd (LEMO no-FiLM ablation).
+    # Skip "broken" models (interior_mean above naive-copy floor of ~1.0).
     BROKEN_THRESHOLD = 0.5
     plotted = []
     for model in MODEL_COLOR:
@@ -164,43 +157,27 @@ def main():
         color = MODEL_COLOR[model]
         m = np.array(d["mean_per_t"])
         s = np.array(d["std_per_t"])
-        T_m = len(m)
-        ts = np.arange(T_m)
+        ts = np.arange(len(m))
         label = f"{MODEL_LABEL[model]} (b/i = {d['ratio']:.2f})"
-        # Left panel: leading boundary frames
-        axL.plot(ts[:ZOOM], m[:ZOOM], color=color, lw=1.8, label=label)
-        axL.fill_between(ts[:ZOOM],
-                          np.maximum(m[:ZOOM] - s[:ZOOM], 1e-5),
-                          m[:ZOOM] + s[:ZOOM],
-                          color=color, alpha=0.15, linewidth=0)
-        # Right panel: trailing boundary frames, with x-axis = distance from end
-        right_ts = ts[T_m - ZOOM:]
-        axR.plot(right_ts, m[T_m - ZOOM:], color=color, lw=1.8, label=label)
-        axR.fill_between(right_ts,
-                          np.maximum(m[T_m - ZOOM:] - s[T_m - ZOOM:], 1e-5),
-                          m[T_m - ZOOM:] + s[T_m - ZOOM:],
-                          color=color, alpha=0.15, linewidth=0)
+        ax.plot(ts, m, color=color, lw=1.8, label=label)
+        ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
+                         color=color, alpha=0.15, linewidth=0)
         plotted.append(model)
 
-    # Mark the b=4 boundary cutoff in each panel
-    axL.axvspan(-0.5, B - 0.5, color="grey", alpha=0.12, lw=0,
-                 label=f"boundary (t<{B})")
-    axR.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.12, lw=0,
-                 label=f"boundary (t≥T-{B})")
-    axL.set_xlim(-0.5, ZOOM - 0.5)
-    axR.set_xlim(T - ZOOM - 0.5, T - 0.5)
-    axL.set_xlabel("rollout step $t$ (leading boundary)")
-    axR.set_xlabel("rollout step $t$ (trailing boundary)")
-    axL.set_ylabel(r"rel-$L_2$ (mean over cells)")
-    axL.set_yscale("log"); axR.set_yscale("log")
-    for ax in (axL, axR):
-        ax.grid(linestyle=":", alpha=0.4, which="both")
-        for sp in ("top", "right"):
-            ax.spines[sp].set_visible(False)
-    fig.suptitle("Per-position boundary audit (zoom on edges)",
-                  fontsize=12, y=1.0)
-    axL.legend(loc="upper right", fontsize=9, frameon=False)
-    fig.tight_layout(rect=[0, 0, 1, 1])
+    # Boundary shading on the single axis
+    ax.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
+                label=f"boundary (t<{B} or t≥T-{B})")
+    ax.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+    ax.set_xlim(-0.5, T - 0.5)
+    ax.set_xlabel("rollout step $t$")
+    ax.set_ylabel(r"rel-$L_2$ (mean over cells)")
+    ax.set_yscale("log")
+    ax.set_title("Per-position boundary audit", fontsize=11)
+    ax.grid(linestyle=":", alpha=0.4, which="both")
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    ax.legend(loc="lower right", fontsize=9, framealpha=0.9, frameon=False)
+    fig.tight_layout()
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_FIG, bbox_inches="tight")
     fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150, bbox_inches="tight")
