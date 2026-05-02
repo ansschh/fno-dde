@@ -141,21 +141,19 @@ def main():
     # Figure: aggregate per-position rel-L2 for each model + boundary shading
     # + ratio annotation per model.
     # ------------------------------------------------------------------
-    # Broken-axis layout: wide left for leading boundary (t=0..ZOOM-1),
-    # narrow middle for interior, wide right for trailing boundary.
-    # The interior region carries no signal; we squeeze it and put diagonal
-    # break marks on the inner spines.
-    ZOOM = 16
-    T = max(d["T"] for d in agg.values())
-    fig, (axL, axR) = plt.subplots(
-        1, 2, figsize=(10.5, 4.2), sharey=True,
-        gridspec_kw={"width_ratios": [1, 1], "wspace": 0.04})
-
-    # Skip "broken" models (interior_mean above naive-copy floor of ~1.0).
+    # ------------------------------------------------------------------
+    # Single-panel layout, full rollout, log-y. Legend below the figure so
+    # multi-model fill-ins (FNO/Markov-FNO/Window-FNO/UNet/...) don't crowd
+    # the plot area.
+    # ------------------------------------------------------------------
     BROKEN_THRESHOLD = 0.5
+    T = max(d["T"] for d in agg.values())
+
+    fig, ax = plt.subplots(figsize=(8.5, 4.4))
     plotted = []
     for model in MODEL_COLOR:
-        if model not in agg: continue
+        if model not in agg:
+            continue
         if agg[model]["interior_mean"] > BROKEN_THRESHOLD:
             print(f"  excluding {model} from figure: interior_mean="
                   f"{agg[model]['interior_mean']:.3e} (> {BROKEN_THRESHOLD})")
@@ -164,48 +162,33 @@ def main():
         color = MODEL_COLOR[model]
         m = np.array(d["mean_per_t"])
         s = np.array(d["std_per_t"])
-        T_m = len(m)
-        ts = np.arange(T_m)
+        ts = np.arange(len(m))
         label = f"{MODEL_LABEL[model]} (b/i = {d['ratio']:.2f})"
-        for ax in (axL, axR):
-            ax.plot(ts, m, color=color, lw=1.8,
-                    label=label if ax is axL else None)
-            ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
-                             color=color, alpha=0.15, linewidth=0)
+        ax.plot(ts, m, color=color, lw=1.8, label=label)
+        ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
+                         color=color, alpha=0.15, linewidth=0)
         plotted.append(model)
 
-    # Boundary shading
-    axL.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
-                 label=f"boundary (t<{B} or t≥T-{B})")
-    axR.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+    ax.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
+                label=f"boundary (t<{B} or t≥T-{B})")
+    ax.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+    ax.set_xlim(-0.5, T - 0.5)
+    ax.set_yscale("log")
+    ax.set_xlabel("rollout step $t$")
+    ax.set_ylabel(r"rel-$L_2$ (mean over cells)")
+    ax.set_title("Per-position boundary audit", fontsize=11)
+    ax.grid(linestyle=":", alpha=0.4, which="both")
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
 
-    # X-axis windows: left shows the leading boundary, right shows the trailing.
-    axL.set_xlim(-0.5, ZOOM - 0.5)
-    axR.set_xlim(T - ZOOM - 0.5, T - 0.5)
-
-    # Hide inner spines and add diagonal break marks
-    axL.spines["right"].set_visible(False)
-    axR.spines["left"].set_visible(False)
-    axR.tick_params(axis="y", left=False, labelleft=False)
-    axL.spines["top"].set_visible(False); axR.spines["top"].set_visible(False)
-
-    d_break = 0.012  # break-mark size
-    kwargs = dict(transform=axL.transAxes, color="black",
-                   clip_on=False, lw=1.0)
-    axL.plot((1 - d_break, 1 + d_break), (-d_break, +d_break), **kwargs)
-    axL.plot((1 - d_break, 1 + d_break), (1 - d_break, 1 + d_break), **kwargs)
-    kwargs.update(transform=axR.transAxes)
-    axR.plot((-d_break, +d_break), (-d_break, +d_break), **kwargs)
-    axR.plot((-d_break, +d_break), (1 - d_break, 1 + d_break), **kwargs)
-
-    axL.set_ylabel(r"rel-$L_2$ (mean over cells)")
-    fig.text(0.5, 0.01, "rollout step $t$", ha="center", fontsize=11)
-    for ax in (axL, axR):
-        ax.set_yscale("log")
-        ax.grid(linestyle=":", alpha=0.4, which="both")
-    fig.suptitle("Per-position boundary audit", fontsize=12, y=0.99)
-    axL.legend(loc="lower right", fontsize=9, framealpha=0.9, frameon=False)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.97])
+    # Legend below the figure — wraps to multiple rows if many models.
+    handles, labels = ax.get_legend_handles_labels()
+    n_models = len([h for h in labels if "boundary" not in h])
+    ncol = min(n_models + 1, 4)  # +1 for the boundary entry
+    fig.legend(handles, labels, loc="lower center",
+                bbox_to_anchor=(0.5, -0.04), ncol=ncol,
+                fontsize=9, frameon=False)
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_FIG, bbox_inches="tight")
     fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150, bbox_inches="tight")
