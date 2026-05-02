@@ -337,49 +337,75 @@ def fig04_effect_size(stats: dict):
     return out
 
 
-def fig05_training_curves(history: dict):
-    """val_rel_l2 vs epoch, mean+/-std over seeds, one panel per family."""
-    if not history:
+def fig05_training_curves(history_by_model: dict):
+    """val_rel_l2 vs epoch, one panel per family, one curve per model
+    (mean over seeds with shaded std band).
+
+    `history_by_model` is {model_name: {(fam, regime, seed): history_dict}}.
+    Plots every model present in MODEL_ORDER for which we have history data,
+    so reviewers can compare convergence behaviour across all benchmarked
+    architectures rather than just LEMO-PC alone.
+    """
+    if not history_by_model:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.2 * len(FAMS), 3.5),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.5 * len(FAMS), 3.8),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
-    plotted = False
+    handles, labels = [], []
+    plotted_any = False
     for ax, fam in zip(axes, FAMS):
-        curves = []
-        for seed in SEEDS:
-            d = history.get((fam, "clean", seed))
-            if d is None:
+        plotted_in_panel = False
+        for model in MODEL_ORDER:
+            history = history_by_model.get(model, {})
+            if not history:
                 continue
-            v = d.get("val_rel_l2") or d.get("val_relL2") or []
-            if v:
-                curves.append(np.array(v))
-        if not curves:
+            curves = []
+            for seed in SEEDS:
+                d = history.get((fam, "clean", seed))
+                if d is None:
+                    continue
+                v = d.get("val_rel_l2") or d.get("val_relL2") or []
+                if v:
+                    curves.append(np.array(v))
+            if not curves:
+                continue
+            L = min(len(c) for c in curves)
+            curves = np.stack([c[:L] for c in curves], axis=0)
+            epochs = np.arange(1, L + 1)
+            color = MODEL_COLOR.get(model, "#888888")
+            line, = ax.plot(epochs, curves.mean(axis=0), color=color, lw=1.4,
+                             label=MODEL_LABELS.get(model, model))
+            if curves.shape[0] > 1:
+                ax.fill_between(epochs,
+                                 curves.mean(axis=0) - curves.std(axis=0),
+                                 curves.mean(axis=0) + curves.std(axis=0),
+                                 color=color, alpha=0.18, linewidth=0)
+            if MODEL_LABELS.get(model, model) not in labels:
+                handles.append(line)
+                labels.append(MODEL_LABELS.get(model, model))
+            plotted_in_panel = True
+            plotted_any = True
+        if not plotted_in_panel:
             ax.set_visible(False)
             continue
-        L = min(len(c) for c in curves)
-        curves = np.stack([c[:L] for c in curves], axis=0)
-        epochs = np.arange(1, L + 1)
-        ax.plot(epochs, curves.mean(axis=0), color=MODEL_COLOR["lemo_pc_nd"], lw=1.5)
-        ax.fill_between(epochs,
-                         curves.mean(axis=0) - curves.std(axis=0),
-                         curves.mean(axis=0) + curves.std(axis=0),
-                         color=MODEL_COLOR["lemo_pc_nd"], alpha=0.25)
         ax.set_yscale("log")
         ax.set_xlabel("epoch")
         ax.set_title(FAM_LABELS[fam])
         ax.grid(linestyle="--", alpha=0.4)
-        plotted = True
-    if not plotted:
+    if not plotted_any:
         plt.close(fig)
         return None
     axes[0].set_ylabel(r"Validation rel$L_2$")
-    fig.suptitle("LEMO-PC validation rel$L_2$ vs epoch (mean +/- std over 3 seeds, clean regime)")
-    fig.tight_layout()
+    if handles:
+        fig.legend(handles, labels, loc="lower center",
+                    bbox_to_anchor=(0.5, -0.02),
+                    ncol=min(len(handles), 7), frameon=False, fontsize=9)
+    fig.suptitle("Validation rel$L_2$ vs epoch (mean over seeds, clean regime, all baselines)")
+    fig.tight_layout(rect=[0, 0.04, 1, 1])
     out = FIG_DIR / "F05_training_curves.pdf"
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
+    fig.savefig(out, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out
 
@@ -526,13 +552,14 @@ def main():
     if not stats:
         warnings.warn(f"missing stats: {STATS_PATH}")
     data = gather_all_models()
-    history = load_history("lemo_pc_nd")
+    history_by_model = {m: load_history(m) for m in MODEL_ORDER}
 
     print("\n[paper-figs] data inventory")
     print(f"  paired_permutation.json: {'OK' if stats else 'MISSING'}")
     for m in MODEL_ORDER:
-        print(f"  {MODEL_LABELS.get(m, m):<14}: {len(data.get(m, {})):>4} cells")
-    print(f"  history.json (LEMO-PC): {len(history)} cells")
+        n_cells = len(data.get(m, {}))
+        n_hist = len(history_by_model.get(m, {}))
+        print(f"  {MODEL_LABELS.get(m, m):<14}: {n_cells:>4} cells, {n_hist:>4} history.json")
 
     figs = []
     for name, fn, args in [
@@ -540,9 +567,9 @@ def main():
         ("F02 per-family heatmap",  fig02_perfamily_heatmap,  (data,)),
         ("F03 per-regime box",      fig03_perregime_box,      (data,)),
         ("F04 effect size",         fig04_effect_size,        (stats,)),
-        ("F05 training curves",     fig05_training_curves,    (history,)),
+        ("F05 training curves",     fig05_training_curves,    (history_by_model,)),
         ("F06 per-frame rollout",   fig06_perframe_rollout,   ()),
-        ("F07 op-norm trajectory",  fig07_op_norm_trajectory, (history,)),
+        ("F07 op-norm trajectory",  fig07_op_norm_trajectory, (history_by_model.get("lemo_pc_nd", {}),)),
         ("F08 equivariance test",   fig08_equivariance_test,  ()),
     ]:
         try:
