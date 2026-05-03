@@ -31,11 +31,11 @@ python3 -c "import torch; print(f'[bootstrap] torch {torch.__version__}, cuda av
 
 # 3. Generate data if missing. The dist_*_rd_2d data is a few hundred MB
 # total and takes ~25-30 min single-process; we parallelize one family per
-# core for faster bring-up.
+# core for faster bring-up.  Shards are .npz (NumPy zip), NOT .h5.
 mkdir -p data_dde_pde
 need_gen=0
 for fam in dist_exp_rd_2d dist_gaussian_rd_2d dist_gamma_rd_2d dist_uniform_rd_2d dist_powerlaw_rd_2d; do
-  if [ ! -f data_dde_pde/$fam/manifest.json ] || [ ! -f data_dde_pde/$fam/test/shard_000.h5 ]; then
+  if [ ! -f data_dde_pde/$fam/manifest.json ] || [ ! -f data_dde_pde/$fam/test/shard_000.npz ] || [ ! -f data_dde_pde/$fam/train/shard_000.npz ] || [ ! -f data_dde_pde/$fam/val/shard_000.npz ]; then
     need_gen=1
     break
   fi
@@ -100,16 +100,42 @@ assert "model_state_dict" in ckpt and "config" in ckpt, "missing keys in ckpt"
 print(f"[smoke-verify] best_model.pt loads OK ({len(ckpt['model_state_dict'])} tensors, epoch {ckpt['epoch']})")
 PYEOF
 EPOCH_TIME=$(grep -oE 'wall_per_epoch_s.*[0-9.]+' "$SMOKE_LOG" | tail -1 | grep -oE '[0-9.]+$' || echo "")
-echo "[bootstrap] smoke test PASSED.  per-epoch wall: ${EPOCH_TIME:-unknown}s"
+echo "[bootstrap] training smoke PASSED.  per-epoch wall: ${EPOCH_TIME:-unknown}s"
 if [ -n "$EPOCH_TIME" ] && (( $(echo "$EPOCH_TIME > 50" | bc -l 2>/dev/null || echo 0) )); then
   echo "[bootstrap] WARNING: per-epoch > 50s ($EPOCH_TIME). Continuing anyway (user override)."
 fi
 rm -rf outputs/_smoke
 
-# 5. Launch the actual sweep.
+# 4b. Per-model build smoke — verify EVERY unique model in the cell list
+# constructs and forward-passes without errors (catches import/build bugs
+# in fno_film_nd, nide_nd, ndde_nd, s4_nd, etc. that the lemo_pc_nd
+# training smoke wouldn't trigger).
+echo "[bootstrap] running per-model build smoke (forward-pass only)..."
+python3 -u scripts/_smoke_models.py > train_logs/offload/_smoke_models.log 2>&1
+SMOKE_MODELS_RC=$?
+if [ $SMOKE_MODELS_RC -ne 0 ]; then
+  echo "[bootstrap] FATAL: $SMOKE_MODELS_RC models failed to build.  Last 30 lines:"
+  tail -30 train_logs/offload/_smoke_models.log
+  echo "[bootstrap] aborting — refusing to launch sweep with broken models."
+  exit 6
+fi
+echo "[bootstrap] per-model build smoke PASSED."
+
+# 5. Launch the actual sweep.  setsid + < /dev/null fully detaches from
+# the SSH session — survives logout, hangup, and parent process death.
 START=${1:-0}; COUNT=${2:-50}; NGPU=${3:-8}
 echo "[bootstrap] launching sweep: START=$START, COUNT=$COUNT, NGPU=$NGPU"
-nohup bash scripts/_launch_caltech_offload.sh $START $COUNT $NGPU \
+setsid bash scripts/_launch_caltech_offload.sh $START $COUNT $NGPU \
+  < /dev/null \
   > train_logs/offload/_master.log 2>&1 &
-echo "[bootstrap] sweep launched, master PID $!"
+MASTER_PID=$!
+echo "[bootstrap] sweep launched, master PID $MASTER_PID (setsid'd, fully detached)"
 echo "[bootstrap] tail -f train_logs/offload/_master.log to watch."
+# Brief confirmation that the master process is actually running.
+sleep 3
+if kill -0 $MASTER_PID 2>/dev/null; then
+  echo "[bootstrap] master process confirmed running."
+else
+  echo "[bootstrap] WARNING: master PID $MASTER_PID not found 3s after launch — check master log."
+  tail -20 train_logs/offload/_master.log 2>/dev/null
+fi

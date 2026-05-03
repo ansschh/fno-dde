@@ -209,6 +209,7 @@ def main() -> None:
         epoch_t0 = time.time()
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats()
+        nan_skips = 0
         for batch in train_loader:
             x = batch["input"].to(device).float()
             y_target = batch["target"].to(device).float()
@@ -219,6 +220,15 @@ def main() -> None:
             diff = (y_pred - y_target) * mask_bc
             denom = mask_bc.sum().clamp_min(1.0) * y_target.shape[-1]
             loss = (diff ** 2).sum() / denom
+            # NaN/Inf guard: skip the batch and DO NOT zero/step the
+            # optimizer if loss is non-finite.  Otherwise NaNs propagate
+            # through the weights and corrupt every subsequent batch.
+            if not torch.isfinite(loss):
+                nan_skips += 1
+                if nan_skips >= 50:
+                    print(f"[ep {epoch+1}] FATAL: 50 consecutive non-finite losses; aborting cell.")
+                    raise RuntimeError("loss diverged (NaN/Inf)")
+                continue
             opt.zero_grad()
             loss.backward()
             gn = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -226,6 +236,9 @@ def main() -> None:
             opt.step()
             running_loss += loss.item()
             n_steps += 1
+        if n_steps == 0:
+            print(f"[ep {epoch+1}] WARN: every batch produced non-finite loss; skipping epoch.")
+            continue
         sched.step()
         avg_loss = running_loss / n_steps
         val_rl2 = evaluate(model, val_loader, device)
