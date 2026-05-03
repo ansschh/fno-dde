@@ -76,6 +76,10 @@ def build_model(config: dict, in_channels: int, out_channels: int,
         from models.lemo_pc_nd import create_causal_lemo_pc_nd
         return create_causal_lemo_pc_nd(in_channels, out_channels, config, length=length)
 
+    if model_class == "causal_smooth_lemo_pc_nd":
+        from models.lemo_pc_nd import create_causal_smooth_lemo_pc_nd
+        return create_causal_smooth_lemo_pc_nd(in_channels, out_channels, config, length=length)
+
     if model_class == "per_lag_mlp_nd":
         from models.per_lag_mlp_nd import create_per_lag_mlp_nd
         return create_per_lag_mlp_nd(in_channels, out_channels, config, length=length)
