@@ -108,11 +108,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         axes = [axes]
 
     import matplotlib.patheffects as pe
-    from scipy.ndimage import zoom
     halo = pe.withStroke(linewidth=4, foreground="white")
-
-    UPSAMPLE = 16  # 64x64 -> 1024x1024 via cubic spline. Beyond this, returns
-                   # diminish (no new information; spline starts to ring).
 
     for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
         all_arrs = [y_l, yhL] + ([yhF] if yhF is not None else [])
@@ -121,14 +117,10 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
         levels = np.concatenate([-pos_levels[::-1], pos_levels])
 
-        # Upsample GT for the background heatmap so it looks crisp at 400 dpi.
-        y_hi = zoom(y_l, UPSAMPLE, order=3)
-        ax.imshow(y_hi, cmap="viridis", vmin=-vmax, vmax=vmax,
-                  interpolation="bilinear",
-                  extent=[-0.5, W - 0.5, H - 0.5, -0.5])
-
-        # Contours stay on the original (untransformed) grid so coordinates
-        # match the imshow extent.
+        # Native 64x64 GT field — keep the original resolution rather than
+        # upsampling. Bicubic interpolation in imshow handles screen smoothing.
+        ax.imshow(y_l, cmap="viridis", vmin=-vmax, vmax=vmax,
+                  interpolation="bicubic")
         xs, ys = np.arange(W), np.arange(H)
 
         # GT — thick solid black with halo
@@ -171,11 +163,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                 bbox_to_anchor=(0.5, -0.02),
                 ncol=3, frameon=False, fontsize=10)
 
-    fig.suptitle(
-        "Iso-level contours of the predicted field over GT — "
-        "where coloured lines trace black, the model recovered the field "
-        f"(final frame, sample {sample_idx})",
-        fontsize=11, y=1.02)
+    fig.suptitle("Predicted vs GT contours", fontsize=16, y=1.02)
     fig.tight_layout(rect=[0, 0.04, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
