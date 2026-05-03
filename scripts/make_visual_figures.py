@@ -191,13 +191,16 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
             for c in getattr(cs, "collections", []):
                 c.set_path_effects([halo])
 
-    # ----- Variant A: GT / LEMO / FNO heatmaps (3 rows × N cols) -----
-    fig, axes = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
+    # ----- Variant A: GT / LEMO / FNO heatmaps -----
+    # Drop FNO row gracefully if no FNO+FiLM data is available.
+    has_fno = any(p[3] is not None for p in panels)
+    n_rows_a = 3 if has_fno else 2
+    fig, axes = plt.subplots(n_rows_a, n, figsize=(3.5 * n, 3.5 * n_rows_a),
                               gridspec_kw={"wspace": 0.04, "hspace": 0.07})
     if n == 1:
-        axes = axes.reshape(3, 1)
+        axes = axes.reshape(n_rows_a, 1)
 
-    row_labels = ["Ground Truth", "LEMO-PC", "FNO+FiLM"]
+    row_labels = ["Ground Truth", "LEMO-PC"] + (["FNO+FiLM"] if has_fno else [])
     for i, lbl in enumerate(row_labels):
         axes[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
                                 va="center", labelpad=20)
@@ -210,16 +213,17 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         _overlay_gt_contours(axes[0, j], y_gt, vmax)
         _draw_heatmap(axes[1, j], y_lemo, vmax)
         _overlay_gt_contours(axes[1, j], y_gt, vmax)
-        if y_fno is not None:
-            _draw_heatmap(axes[2, j], y_fno, vmax)
-            _overlay_gt_contours(axes[2, j], y_gt, vmax)
-        else:
-            axes[2, j].set_xticks([]); axes[2, j].set_yticks([])
-            for sp in axes[2, j].spines.values():
-                sp.set_linewidth(0.6)
-            axes[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
-                              transform=axes[2, j].transAxes,
-                              color="dimgrey", fontsize=12)
+        if has_fno:
+            if y_fno is not None:
+                _draw_heatmap(axes[2, j], y_fno, vmax)
+                _overlay_gt_contours(axes[2, j], y_gt, vmax)
+            else:
+                axes[2, j].set_xticks([]); axes[2, j].set_yticks([])
+                for sp in axes[2, j].spines.values():
+                    sp.set_linewidth(0.6)
+                axes[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
+                                  transform=axes[2, j].transAxes,
+                                  color="dimgrey", fontsize=12)
 
     fig.suptitle("Predicted vs GT fields (hardest sample per family)",
                  fontsize=16, y=0.99)
@@ -239,12 +243,18 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     dd_vmax = (float(max(max(np.abs(d).max() for d in diffs_all), 1e-9))
                 if diffs_all else 1e-9)
 
-    fig2, axes2 = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
-                                  gridspec_kw={"wspace": 0.04, "hspace": 0.07,
-                                               "right": 0.92})
+    # Drop Error Difference row if no FNO+FiLM data; reduces figure to 2 rows.
+    has_fno_b = bool(diffs_all)
+    n_rows_b = 3 if has_fno_b else 2
+    fig2, axes2 = plt.subplots(n_rows_b, n,
+                                 figsize=(3.5 * n, 3.5 * n_rows_b),
+                                 gridspec_kw={"wspace": 0.04, "hspace": 0.07,
+                                              "right": 0.92})
     if n == 1:
-        axes2 = axes2.reshape(3, 1)
-    row_labels2 = ["Ground Truth", "LEMO Error", "Error Difference"]
+        axes2 = axes2.reshape(n_rows_b, 1)
+    row_labels2 = ["Ground Truth", "LEMO Error"]
+    if has_fno_b:
+        row_labels2.append("Error Difference")
     for i, lbl in enumerate(row_labels2):
         axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
                                  va="center", labelpad=20)
@@ -260,23 +270,26 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                             scale="mild", return_im=True)
         if j == n - 1: im_le = im
         _overlay_gt_contours(axes2[1, j], y_gt, le_vmax)
-        if y_fno is not None:
-            diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
-            im = _draw_heatmap(axes2[2, j], diff, dd_vmax,
-                                scale="mild", return_im=True)
-            if j == n - 1: im_dd = im
-            _overlay_gt_contours(axes2[2, j], y_gt, dd_vmax)
-        else:
-            axes2[2, j].set_xticks([]); axes2[2, j].set_yticks([])
-            for sp in axes2[2, j].spines.values():
-                sp.set_linewidth(0.6)
-            axes2[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
-                               transform=axes2[2, j].transAxes,
-                               color="dimgrey", fontsize=12)
+        if has_fno_b:
+            if y_fno is not None:
+                diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
+                im = _draw_heatmap(axes2[2, j], diff, dd_vmax,
+                                    scale="mild", return_im=True)
+                if j == n - 1: im_dd = im
+                _overlay_gt_contours(axes2[2, j], y_gt, dd_vmax)
+            else:
+                axes2[2, j].set_xticks([]); axes2[2, j].set_yticks([])
+                for sp in axes2[2, j].spines.values():
+                    sp.set_linewidth(0.6)
+                axes2[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
+                                   transform=axes2[2, j].transAxes,
+                                   color="dimgrey", fontsize=12)
     # Per-row colorbars
-    for ax_row, im_row, lbl in [(axes2[0, -1], im_gt, "field"),
-                                  (axes2[1, -1], im_le, "pred − GT"),
-                                  (axes2[2, -1], im_dd, "|LEMO err| − |FNO err|")]:
+    cb_rows = [(axes2[0, -1], im_gt, "field"),
+                (axes2[1, -1], im_le, "pred − GT")]
+    if has_fno_b:
+        cb_rows.append((axes2[2, -1], im_dd, "|LEMO err| − |FNO err|"))
+    for ax_row, im_row, lbl in cb_rows:
         if im_row is None: continue
         cb = fig2.colorbar(im_row, ax=ax_row, fraction=0.05, pad=0.04,
                             shrink=0.95, aspect=18)
@@ -406,44 +419,60 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     if fam_pick in fam_data:
         y, yhat_l, yhat_f, t_abs, t_lbls, l2_hard = fam_data[fam_pick]
         n_t = len(t_abs)
-        if yhat_f is not None and n_t > 0:
+        if n_t > 0:
             # Shared per-row vmax + per-row colorbar
             gt_vmax_seq = float(max(max(np.abs(y[t, ..., 0]).max()
                                           for t in t_abs), 1e-9))
+            has_fno_seq = (yhat_f is not None)
             diff_list = []
+            le_err_list = []
             for t in t_abs:
                 yg = y[t, ..., 0]
-                el = np.abs(yhat_l[t, ..., 0] - yg)
-                ef = np.abs(yhat_f[t, ..., 0] - yg)
-                diff_list.append(el - ef)
-            dd_vmax_seq = float(max(max(np.abs(d).max() for d in diff_list),
-                                     1e-9))
+                el_arr = yhat_l[t, ..., 0] - yg
+                le_err_list.append(el_arr)
+                if has_fno_seq:
+                    el = np.abs(el_arr)
+                    ef = np.abs(yhat_f[t, ..., 0] - yg)
+                    diff_list.append(el - ef)
+            le_vmax_seq = float(max(max(np.abs(e).max() for e in le_err_list),
+                                       1e-9))
+            dd_vmax_seq = (float(max(max(np.abs(d).max() for d in diff_list),
+                                        1e-9)) if diff_list else 1e-9)
 
-            figA, axA = plt.subplots(2, n_t, figsize=(3.4 * n_t, 7.0),
+            n_rows_seq = 2 if has_fno_seq else 2  # GT + (Err Diff OR LEMO Error)
+            figA, axA = plt.subplots(n_rows_seq, n_t,
+                                       figsize=(3.4 * n_t, 3.4 * n_rows_seq + 0.2),
                                        gridspec_kw={"wspace": 0.04,
                                                     "hspace": 0.07})
             if n_t == 1:
-                axA = axA.reshape(2, 1)
-            row_labels = ["Ground Truth", "Error Difference"]
+                axA = axA.reshape(n_rows_seq, 1)
+            if has_fno_seq:
+                row_labels = ["Ground Truth", "Error Difference"]
+            else:
+                row_labels = ["Ground Truth", "LEMO Error"]
             for i, lbl in enumerate(row_labels):
                 axA[i, 0].set_ylabel(lbl, fontsize=14, rotation=0,
                                        ha="right", va="center", labelpad=20)
             im_gt_a = im_dd_a = None
-            for j, (t, lbl, diff) in enumerate(zip(t_abs, t_lbls, diff_list)):
+            for j, (t, lbl) in enumerate(zip(t_abs, t_lbls)):
                 y_gt = y[t, ..., 0]
                 axA[0, j].set_title(f"t={lbl}", fontsize=13)
                 im = _draw_heatmap(axA[0, j], y_gt, gt_vmax_seq, return_im=True)
                 if j == n_t - 1: im_gt_a = im
                 _overlay_gt_contours(axA[0, j], y_gt, gt_vmax_seq)
-                im = _draw_heatmap(axA[1, j], diff, dd_vmax_seq,
-                                     scale="mild", return_im=True)
+                if has_fno_seq:
+                    im = _draw_heatmap(axA[1, j], diff_list[j], dd_vmax_seq,
+                                         scale="mild", return_im=True)
+                else:
+                    im = _draw_heatmap(axA[1, j], le_err_list[j], le_vmax_seq,
+                                         scale="mild", return_im=True)
                 if j == n_t - 1: im_dd_a = im
-                _overlay_gt_contours(axA[1, j], y_gt, dd_vmax_seq)
-            # Per-row colorbars: anchor to the entire row so no single panel
-            # gets shrunk (previous version made the t=63 box smaller).
+                _overlay_gt_contours(axA[1, j], y_gt,
+                                       dd_vmax_seq if has_fno_seq else le_vmax_seq)
+            cb_lbl1 = ("|LEMO err| − |FNO err|" if has_fno_seq
+                        else "LEMO err (pred − GT)")
             for row_idx, im_row, lbl in [(0, im_gt_a, "field"),
-                                          (1, im_dd_a,
-                                           "|LEMO err| − |FNO err|")]:
+                                          (1, im_dd_a, cb_lbl1)]:
                 if im_row is None: continue
                 cb = figA.colorbar(im_row, ax=axA[row_idx, :].tolist(),
                                     fraction=0.025, pad=0.02,
