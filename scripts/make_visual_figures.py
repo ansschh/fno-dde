@@ -315,21 +315,34 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     UPSAMPLE = 32
 
     # Pre-load all 5 families (LEMO + FNO+FiLM) so both A and B have data.
+    # For each family pick the HARDEST sample (highest LEMO-PC relL2 against GT
+    # at the final forecast step) — same worst-case framing as V01_diff.
     fam_data = {}
     for fam in FAMS:
         dl = load_viz(fam)
         df = load_viz_fno(fam)
         if dl is None:
             continue
-        y = dl["target"][sample_idx]
-        yhat_l = dl["pred"][sample_idx]
-        yhat_f = df["pred"][sample_idx] if df is not None else None
-        T_full = y.shape[0]
+        target_all = dl["target"]      # (B, T, *spatial, C)
+        pred_all   = dl["pred"]
+        T_full = target_all.shape[1]
         n_hist = T_full // 2
-        # Absolute time indices for the requested forecast t_steps
+        # Hardest sample by relL2 at final timestep
+        per_sample_l2 = []
+        for b in range(target_all.shape[0]):
+            yg = target_all[b, -1, ..., 0]
+            yp = pred_all[b, -1, ..., 0]
+            num = float(np.sqrt(((yp - yg) ** 2).sum()))
+            den = float(np.sqrt((yg ** 2).sum())) + 1e-12
+            per_sample_l2.append(num / den)
+        h_idx = int(np.argmax(per_sample_l2))
+        l2_hard = per_sample_l2[h_idx]
+        y = target_all[h_idx]
+        yhat_l = pred_all[h_idx]
+        yhat_f = df["pred"][h_idx] if df is not None else None
         t_abs = [n_hist + t for t in t_steps if (n_hist + t) < T_full]
         t_lbls = [t for t in t_steps if (n_hist + t) < T_full]
-        fam_data[fam] = (y, yhat_l, yhat_f, t_abs, t_lbls)
+        fam_data[fam] = (y, yhat_l, yhat_f, t_abs, t_lbls, l2_hard)
     if not fam_data:
         return None
 
@@ -391,7 +404,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     # Option A: single family (Gauss by default), 2 rows × 5 cols
     # ====================================================================
     if fam_pick in fam_data:
-        y, yhat_l, yhat_f, t_abs, t_lbls = fam_data[fam_pick]
+        y, yhat_l, yhat_f, t_abs, t_lbls, l2_hard = fam_data[fam_pick]
         n_t = len(t_abs)
         if yhat_f is not None and n_t > 0:
             # Shared per-row vmax + per-row colorbar
@@ -408,8 +421,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
 
             figA, axA = plt.subplots(2, n_t, figsize=(3.4 * n_t, 7.0),
                                        gridspec_kw={"wspace": 0.04,
-                                                    "hspace": 0.07,
-                                                    "right": 0.92})
+                                                    "hspace": 0.07})
             if n_t == 1:
                 axA = axA.reshape(2, 1)
             row_labels = ["Ground Truth", "Error Difference"]
@@ -427,17 +439,21 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                                      scale="mild", return_im=True)
                 if j == n_t - 1: im_dd_a = im
                 _overlay_gt_contours(axA[1, j], y_gt, dd_vmax_seq)
-            for ax_row, im_row, lbl in [(axA[0, -1], im_gt_a, "field"),
-                                          (axA[1, -1], im_dd_a,
+            # Per-row colorbars: anchor to the entire row so no single panel
+            # gets shrunk (previous version made the t=63 box smaller).
+            for row_idx, im_row, lbl in [(0, im_gt_a, "field"),
+                                          (1, im_dd_a,
                                            "|LEMO err| − |FNO err|")]:
                 if im_row is None: continue
-                cb = figA.colorbar(im_row, ax=ax_row, fraction=0.05, pad=0.04,
-                                    shrink=0.95, aspect=18)
+                cb = figA.colorbar(im_row, ax=axA[row_idx, :].tolist(),
+                                    fraction=0.025, pad=0.02,
+                                    shrink=0.95, aspect=22)
                 cb.ax.tick_params(labelsize=8)
                 cb.set_label(lbl, fontsize=9)
-            figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
-                          fontsize=18, y=0.99)
-            figA.tight_layout(rect=[0, 0, 0.92, 0.96])
+            figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}  "
+                          f"(hardest sample, $\\ell_2$={l2_hard:.3f})",
+                          fontsize=15, y=0.99)
+            figA.tight_layout(rect=[0, 0, 1, 0.96])
             out = FIG / "V02_rollout_sequence.pdf"
             figA.savefig(out, bbox_inches="tight")
             figA.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
@@ -451,7 +467,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                        and len(fam_data[f][3]) > 0]
     if fams_with_both:
         # Use the timesteps from the first family (all should match).
-        _, _, _, ref_t_abs, ref_t_lbls = fam_data[fams_with_both[0]]
+        _, _, _, ref_t_abs, ref_t_lbls, _ = fam_data[fams_with_both[0]]
         n_t = len(ref_t_abs)
         n_f = len(fams_with_both)
         figB, axB = plt.subplots(n_f, n_t,
@@ -461,7 +477,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
         if n_f == 1:
             axB = axB.reshape(1, n_t)
         for i, fam in enumerate(fams_with_both):
-            y, yhat_l, yhat_f, t_abs, t_lbls = fam_data[fam]
+            y, yhat_l, yhat_f, t_abs, t_lbls, l2_hard = fam_data[fam]
             # PER-CELL vmax (each timestep self-normalizes for bold colors).
             diffs = []
             for t in t_abs:
