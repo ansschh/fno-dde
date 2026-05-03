@@ -173,7 +173,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                   gridspec_kw={"wspace": 0.04, "hspace": 0.07})
     if n == 1:
         axes2 = axes2.reshape(2, 1)
-    row_labels2 = ["Ground Truth", "Err Diff"]
+    row_labels2 = ["Ground Truth", "Error Difference"]
     for i, lbl in enumerate(row_labels2):
         axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
                                  va="center", labelpad=20)
