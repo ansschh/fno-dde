@@ -37,7 +37,7 @@ def _base_args(model, fam, reg, seed, output_root,
                noise_std=0.05, downsample_factor=2,
                residual_anchor=False, sigma=None,
                data_dir="data_dde_pde",
-               epochs=200, batch_size=4,
+               epochs=100, batch_size=4,
                width=64, n_layers=3, lag_modes=24, spatial_modes=12):
     args = [
         "--family", fam,
