@@ -679,7 +679,8 @@ def main():
         ("V01 family triptych",     fig_v01_family_triptych),
         ("V02 rollout sequence",    fig_v02_rollout_sequence),
         # V03 dropped: signed LEMO error is now row 2 of V01_family_triptych_diff.
-        ("V04 spectral kernel",     fig_v04_spectral_kernel),
+        # V04 dropped: not referenced in paper; redundant with V05 (kernel
+        # recovery) for kernel structure and F07 (op-norm trajectory) for σ-bound.
         ("V05 kernel recovery",     fig_v05_kernel_recovery),
         ("V06 residual FFT",        fig_v06_residual_fft),
     ]:
