@@ -116,14 +116,19 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
 
     def _draw_heatmap(ax, field, vmax, cmap=PASTEL_DIV, scale="linear",
                         headroom=1.0, return_im=False):
-        """Upsampled imshow of `field`. scale in {'linear', 'sqrt', 'symlog'}.
-        sqrt = signed sqrt-of-magnitude (FuncNorm) — good middle ground:
-        amplifies small errors moderately while keeping the colorbar
-        showing real values."""
+        """Upsampled imshow of `field`. scale in {'linear', 'mild', 'sqrt', 'symlog'}.
+        - mild: signed power-norm with gamma=0.7 (gentler than sqrt)
+        - sqrt: signed sqrt-of-magnitude (gamma=0.5)
+        - symlog: SymLogNorm with linthresh=1e-3 * vmax
+        """
         f_hi = zoom(field, UPSAMPLE, order=3)
         H, W = field.shape
         v = vmax * headroom
         extent = [-0.5, W - 0.5, H - 0.5, -0.5]
+        def _signed_power(gamma):
+            fwd = lambda x: np.sign(x) * np.power(np.abs(x), gamma)
+            inv = lambda x: np.sign(x) * np.power(np.abs(x), 1.0 / gamma)
+            return FuncNorm((fwd, inv), vmin=-v, vmax=v)
         if scale == "symlog":
             linthresh = max(1e-3 * v, 1e-9)
             im = ax.imshow(f_hi, cmap=cmap,
@@ -131,10 +136,12 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                              vmin=-v, vmax=v, base=10),
                             interpolation="bilinear", extent=extent)
         elif scale == "sqrt":
-            fwd = lambda x: np.sign(x) * np.sqrt(np.abs(x))
-            inv = lambda x: np.sign(x) * (x ** 2)
             im = ax.imshow(f_hi, cmap=cmap,
-                            norm=FuncNorm((fwd, inv), vmin=-v, vmax=v),
+                            norm=_signed_power(0.5),
+                            interpolation="bilinear", extent=extent)
+        elif scale == "mild":
+            im = ax.imshow(f_hi, cmap=cmap,
+                            norm=_signed_power(0.7),
                             interpolation="bilinear", extent=extent)
         else:  # linear
             im = ax.imshow(f_hi, cmap=cmap, vmin=-v, vmax=v,
@@ -211,16 +218,16 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         gt_v = float(np.abs(y_gt).max())
         _draw_heatmap(axes2[0, j], y_gt, gt_v)
         _overlay_gt_contours(axes2[0, j], y_gt, gt_v)
-        # Row 2: signed LEMO error — per-cell vmax, linear, RdBu_r
+        # Row 2: signed LEMO error — mild power-norm (gamma=0.7)
         lemo_err_signed = y_lemo - y_gt
         le_v = float(max(np.abs(lemo_err_signed).max(), 1e-9))
-        _draw_heatmap(axes2[1, j], lemo_err_signed, le_v)
+        _draw_heatmap(axes2[1, j], lemo_err_signed, le_v, scale="mild")
         _overlay_gt_contours(axes2[1, j], y_gt, le_v)
-        # Row 3: |LEMO err| − |FNO err| — per-cell vmax, linear
+        # Row 3: |LEMO err| − |FNO err| — mild power-norm
         if y_fno is not None:
             diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
             dd_v = float(max(np.abs(diff).max(), 1e-9))
-            _draw_heatmap(axes2[2, j], diff, dd_v)
+            _draw_heatmap(axes2[2, j], diff, dd_v, scale="mild")
             _overlay_gt_contours(axes2[2, j], y_gt, dd_v)
         else:
             axes2[2, j].set_xticks([]); axes2[2, j].set_yticks([])
@@ -347,7 +354,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 err_f = np.abs(y_f - y_gt)
                 diff = err_l - err_f
                 diff_vmax = float(max(np.max(np.abs(diff)), 1e-9))
-                _draw_heatmap(axA[1, j], diff, diff_vmax)
+                _draw_heatmap(axA[1, j], diff, diff_vmax, scale="mild")
                 _overlay_gt_contours(axA[1, j], y_gt, diff_vmax)
             figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
                           fontsize=18, y=0.99)
@@ -387,7 +394,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
             for j, (t, lbl, diff) in enumerate(zip(t_abs, t_lbls, diffs)):
                 if i == 0:
                     axB[i, j].set_title(f"t={lbl}", fontsize=12)
-                _draw_heatmap(axB[i, j], diff, diff_vmax)
+                _draw_heatmap(axB[i, j], diff, diff_vmax, scale="mild")
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0],
                                        diff_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
