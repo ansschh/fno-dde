@@ -105,11 +105,31 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         if dl is None:
             continue
         df = load_viz_fno(fam)
-        y_gt = dl["target"][sample_idx][target_step, ..., 0]
-        y_lemo = dl["pred"][sample_idx][target_step, ..., 0]
-        y_fno = (df["pred"][sample_idx][target_step, ..., 0]
-                  if df is not None else None)
-        panels.append((fam, y_gt, y_lemo, y_fno))
+        # Pick the HARDEST sample per family: the saved sample with the highest
+        # LEMO-PC relL2 against GT at the final rollout step. Defensible
+        # "worst-case showcase" framing (paper claim: "even on the hardest
+        # sample the prediction tracks the target field with errors confined
+        # to localised regions"). N saved samples per cell is small (4); we
+        # pick hardest among those.
+        target_all = dl["target"]      # (B, T, *spatial, C)
+        pred_all   = dl["pred"]
+        T_idx = target_all.shape[1] + target_step if target_step < 0 else target_step
+        per_sample_l2 = []
+        for b in range(target_all.shape[0]):
+            yg = target_all[b, T_idx, ..., 0]
+            yp = pred_all[b, T_idx, ..., 0]
+            num = float(np.sqrt(((yp - yg) ** 2).sum()))
+            den = float(np.sqrt((yg ** 2).sum())) + 1e-12
+            per_sample_l2.append(num / den)
+        hardest_idx = int(np.argmax(per_sample_l2))
+        l2_hardest = per_sample_l2[hardest_idx]
+        y_gt = target_all[hardest_idx, T_idx, ..., 0]
+        y_lemo = pred_all[hardest_idx, T_idx, ..., 0]
+        if df is not None:
+            y_fno = df["pred"][hardest_idx, T_idx, ..., 0]
+        else:
+            y_fno = None
+        panels.append((fam, y_gt, y_lemo, y_fno, l2_hardest))
     if not panels:
         return None
     n = len(panels)
@@ -181,10 +201,11 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     for i, lbl in enumerate(row_labels):
         axes[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
                                 va="center", labelpad=20)
-    for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
+    for j, (fam, y_gt, y_lemo, y_fno, l2_hard) in enumerate(panels):
         all_arrs = [y_gt, y_lemo] + ([y_fno] if y_fno is not None else [])
         vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
-        axes[0, j].set_title(FAM_LABELS[fam], fontsize=14)
+        axes[0, j].set_title(f"{FAM_LABELS[fam]}\n($\\ell_2$={l2_hard:.3f})",
+                                fontsize=12)
         _draw_heatmap(axes[0, j], y_gt, vmax)
         _overlay_gt_contours(axes[0, j], y_gt, vmax)
         _draw_heatmap(axes[1, j], y_lemo, vmax)
@@ -200,7 +221,8 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                               transform=axes[2, j].transAxes,
                               color="dimgrey", fontsize=12)
 
-    fig.suptitle("Predicted vs GT fields", fontsize=18, y=0.99)
+    fig.suptitle("Predicted vs GT fields (hardest sample per family)",
+                 fontsize=16, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
@@ -228,8 +250,9 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                  va="center", labelpad=20)
 
     im_gt = im_le = im_dd = None
-    for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
-        axes2[0, j].set_title(FAM_LABELS[fam], fontsize=14)
+    for j, (fam, y_gt, y_lemo, y_fno, l2_hard) in enumerate(panels):
+        axes2[0, j].set_title(f"{FAM_LABELS[fam]}\n($\\ell_2$={l2_hard:.3f})",
+                                fontsize=12)
         im = _draw_heatmap(axes2[0, j], y_gt, gt_vmax, return_im=True)
         if j == n - 1: im_gt = im
         _overlay_gt_contours(axes2[0, j], y_gt, gt_vmax)
@@ -260,7 +283,8 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         cb.ax.tick_params(labelsize=8)
         cb.set_label(lbl, fontsize=9)
 
-    fig2.suptitle("Predictions", fontsize=18, y=0.99)
+    fig2.suptitle("Predictions on the hardest sample per family",
+                   fontsize=16, y=0.99)
     fig2.tight_layout(rect=[0, 0, 0.92, 0.96])
     out2 = FIG / "V01_family_triptych_diff.pdf"
     fig2.savefig(out2, bbox_inches="tight")
