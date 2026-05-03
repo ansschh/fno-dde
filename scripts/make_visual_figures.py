@@ -141,7 +141,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     row_labels = ["Ground Truth", "LEMO-PC", "FNO+FiLM"]
     for i, lbl in enumerate(row_labels):
         axes[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
-                                va="center", labelpad=20, fontweight="bold")
+                                va="center", labelpad=20)
     for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
         all_arrs = [y_gt, y_lemo] + ([y_fno] if y_fno is not None else [])
         vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
@@ -161,50 +161,43 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                               transform=axes[2, j].transAxes,
                               color="dimgrey", fontsize=12)
 
-    fig.suptitle("Predicted vs GT fields", fontsize=18, y=0.99,
-                 fontweight="bold")
+    fig.suptitle("Predicted vs GT fields", fontsize=18, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # ----- Variant B: LEMO / FNO / signed-difference (3 rows × N cols) -----
-    fig2, axes2 = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
+    # ----- Variant B: GT / Err Diff (2 rows × N cols) -----
+    fig2, axes2 = plt.subplots(2, n, figsize=(3.5 * n, 7.0),
                                   gridspec_kw={"wspace": 0.04, "hspace": 0.07})
     if n == 1:
-        axes2 = axes2.reshape(3, 1)
-    row_labels2 = ["LEMO-PC", "FNO+FiLM", "|LEMO err| − |FNO err|"]
+        axes2 = axes2.reshape(2, 1)
+    row_labels2 = ["Ground Truth", "Err Diff"]
     for i, lbl in enumerate(row_labels2):
         axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
-                                 va="center", labelpad=20, fontweight="bold")
+                                 va="center", labelpad=20)
     for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
         all_arrs = [y_gt, y_lemo] + ([y_fno] if y_fno is not None else [])
         vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
         axes2[0, j].set_title(FAM_LABELS[fam], fontsize=14)
-        _draw_heatmap(axes2[0, j], y_lemo, vmax)
+        _draw_heatmap(axes2[0, j], y_gt, vmax)
         _overlay_gt_contours(axes2[0, j], y_gt, vmax)
         if y_fno is not None:
-            _draw_heatmap(axes2[1, j], y_fno, vmax)
-            _overlay_gt_contours(axes2[1, j], y_gt, vmax)
-            # Diff: |LEMO err| - |FNO err|. Negative (blue) = LEMO better,
-            # Positive (red) = FNO better.
             err_l = np.abs(y_lemo - y_gt)
             err_f = np.abs(y_fno - y_gt)
             diff = err_l - err_f
             diff_vmax = float(np.max(np.abs(diff)))
-            _draw_heatmap(axes2[2, j], diff, diff_vmax)
-            _overlay_gt_contours(axes2[2, j], y_gt, diff_vmax)
+            _draw_heatmap(axes2[1, j], diff, diff_vmax)
+            _overlay_gt_contours(axes2[1, j], y_gt, diff_vmax)
         else:
-            for r in (1, 2):
-                axes2[r, j].set_xticks([]); axes2[r, j].set_yticks([])
-                for sp in axes2[r, j].spines.values():
-                    sp.set_linewidth(0.6)
-                axes2[r, j].text(0.5, 0.5, "n/a", ha="center", va="center",
-                                   transform=axes2[r, j].transAxes,
-                                   color="dimgrey", fontsize=12)
-    fig2.suptitle("Predictions and error advantage  (blue ⇒ LEMO better, red ⇒ FNO+FiLM better)",
-                   fontsize=14, y=0.99, fontweight="bold")
+            axes2[1, j].set_xticks([]); axes2[1, j].set_yticks([])
+            for sp in axes2[1, j].spines.values():
+                sp.set_linewidth(0.6)
+            axes2[1, j].text(0.5, 0.5, "n/a", ha="center", va="center",
+                               transform=axes2[1, j].transAxes,
+                               color="dimgrey", fontsize=12)
+    fig2.suptitle("Predictions", fontsize=18, y=0.99)
     fig2.tight_layout(rect=[0, 0, 1, 0.96])
     out2 = FIG / "V01_family_triptych_diff.pdf"
     fig2.savefig(out2, bbox_inches="tight")
