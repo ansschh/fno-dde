@@ -626,42 +626,67 @@ def fig_v05_kernel_recovery():
 
 
 def fig_v06_residual_fft():
-    """Residual FFT energy per spectral lag mode, computed directly from
-    viz_samples (target - pred) across families and seeds."""
+    """V06: 2-panel residual spectrum + cumulative-energy truncation justification.
+
+    Left panel: per-mode residual FFT energy E[|r̂_m|²] across 5 families.
+    Right panel: cumulative fraction of residual energy captured by first M modes,
+    with a vertical line at the architectural truncation M=24. Annotations are
+    deliberately minimal — paper text / latex caption fills in the M=24 numeric.
+    """
     series = {}
     for fam in FAMS:
         for seed in SEEDS:
             d = load_viz(fam, "clean", seed)
             if d is None:
                 continue
-            target = d["target"]    # (B, T, *spatial, C)
+            target = d["target"]
             pred = d["pred"]
             r = pred - target
-            # FFT along time axis: move T to last
             perm = [0] + list(range(2, r.ndim)) + [1]
-            r_p = np.transpose(r, axes=perm)        # (..., T)
+            r_p = np.transpose(r, axes=perm)
             R = np.fft.rfft(r_p, axis=-1)
             energy = np.mean(np.abs(R) ** 2, axis=tuple(range(R.ndim - 1)))
             series.setdefault(fam, []).append(energy)
     if not series:
         return None
-    fig, ax = plt.subplots(figsize=(7, 3.5))
-    for fam, es in series.items():
-        e = np.array(es)
+
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.5, 4.0),
+                                     gridspec_kw={"wspace": 0.25})
+    for fam in FAMS:
+        if fam not in series: continue
+        e = np.array(series[fam])
         m = e.mean(axis=0)
         s = e.std(axis=0)
         modes = np.arange(len(m))
-        ax.plot(modes, m, lw=1.5, label=FAM_LABELS[fam])
-        ax.fill_between(modes, m - s, m + s, alpha=0.18)
-    ax.set_yscale("log")
-    ax.set_xlabel("spectral lag mode $m$")
-    ax.set_ylabel(r"$\mathbb{E}\,|\hat{r}_m|^2$")
-    ax.set_title("Residual FFT energy per spectral lag mode (mean $\\pm$ std over seeds)")
-    ax.legend(bbox_to_anchor=(1.02, 1.0), loc="upper left", fontsize=8, frameon=False)
-    ax.grid(linestyle="--", alpha=0.4)
+        axL.plot(modes, m, lw=1.6, label=FAM_LABELS[fam])
+        axL.fill_between(modes, np.maximum(m - s, 1e-3), m + s,
+                          alpha=0.15, lw=0)
+        cumulative = np.cumsum(m)
+        cumulative /= cumulative[-1]
+        axR.plot(modes, cumulative * 100, lw=1.6, label=FAM_LABELS[fam])
+
+    axL.set_yscale("log")
+    axL.set_xlabel("spectral lag mode $m$")
+    axL.set_ylabel(r"$\mathbb{E}\,|\hat{r}_m|^2$")
+    axL.set_title("Per-mode residual energy", fontsize=11)
+    axL.grid(linestyle=":", alpha=0.5, which="both")
+    for sp in ("top", "right"): axL.spines[sp].set_visible(False)
+
+    axR.axvline(24, color="dimgrey", linestyle="--", lw=1.0, alpha=0.7)
+    axR.set_xlabel("modes retained $M$")
+    axR.set_ylabel("% of total residual energy")
+    axR.set_title("Cumulative energy capture", fontsize=11)
+    axR.set_ylim(0, 105)
+    axR.grid(linestyle=":", alpha=0.5)
+    for sp in ("top", "right"): axR.spines[sp].set_visible(False)
+
+    axL.legend(loc="upper right", fontsize=9, frameon=False, ncol=1)
+    fig.suptitle("Residual spectrum and truncation justification",
+                  fontsize=12, y=1.01)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
     out = FIG / "V06_residual_fft.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out
 
