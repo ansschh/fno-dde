@@ -383,15 +383,14 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 # Per-cell vmax for GT row + colorbar
                 gt_v = float(np.abs(y_gt).max())
                 axA[0, j].set_title(f"t={lbl}", fontsize=13)
-                _draw_heatmap(axA[0, j], y_gt, gt_v, add_cbar=True)
+                _draw_heatmap(axA[0, j], y_gt, gt_v)
                 _overlay_gt_contours(axA[0, j], y_gt, gt_v)
-                # Per-cell vmax for Err Diff row + colorbar
+                # Per-cell vmax for Err Diff row
                 err_l = np.abs(y_l - y_gt)
                 err_f = np.abs(y_f - y_gt)
                 diff = err_l - err_f
                 diff_vmax = float(max(np.max(np.abs(diff)), 1e-9))
-                _draw_heatmap(axA[1, j], diff, diff_vmax,
-                               scale="mild", add_cbar=True)
+                _draw_heatmap(axA[1, j], diff, diff_vmax, scale="mild")
                 _overlay_gt_contours(axA[1, j], y_gt, diff_vmax)
             figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
                           fontsize=18, y=0.99)
@@ -431,8 +430,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 if i == 0:
                     axB[i, j].set_title(f"t={lbl}", fontsize=12)
                 cell_vmax = float(max(np.abs(diff).max(), 1e-9))
-                _draw_heatmap(axB[i, j], diff, cell_vmax,
-                                scale="mild", add_cbar=True)
+                _draw_heatmap(axB[i, j], diff, cell_vmax, scale="mild")
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0], cell_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
                                    ha="right", va="center", labelpad=12)
