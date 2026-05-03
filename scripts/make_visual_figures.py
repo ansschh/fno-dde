@@ -206,44 +206,151 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     return out
 
 
-def fig_v02_rollout_sequence(fam_pick="dist_exp_rd_2d", t_steps=(0, 16, 32, 48, 63)):
-    d = load_viz(fam_pick)
-    if d is None:
+def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
+                                t_steps=(0, 16, 32, 48, 63),
+                                sample_idx: int = 0):
+    """V02 rollout-sequence figures (two outputs):
+
+      V02_rollout_sequence.{pdf,png}
+        Option A — 2 rows × 5 cols on a single family (default Gauss = LEMO's
+        hardest family per T01). Top row = GT, bottom row = Error Difference
+        (|LEMO err| − |FNO err|). Aesthetic matches V01_diff (RdBu_r, 32×
+        cubic-spline upsample, GT iso-contours with white halo).
+
+      V02_rollout_grid.{pdf,png}
+        Option B — 5 rows (family) × 5 cols (timestep) of Error Difference.
+        Covers all families in one shot; no cherry-picking. Each cell is a
+        compact heatmap; consistent diff_vmax across cells of the same family.
+    """
+    from scipy.ndimage import zoom
+    import matplotlib.patheffects as pe
+    halo = pe.withStroke(linewidth=3.5, foreground="white")
+    UPSAMPLE = 32
+
+    # Pre-load all 5 families (LEMO + FNO+FiLM) so both A and B have data.
+    fam_data = {}
+    for fam in FAMS:
+        dl = load_viz(fam)
+        df = load_viz_fno(fam)
+        if dl is None:
+            continue
+        y = dl["target"][sample_idx]
+        yhat_l = dl["pred"][sample_idx]
+        yhat_f = df["pred"][sample_idx] if df is not None else None
+        T_full = y.shape[0]
+        n_hist = T_full // 2
+        # Absolute time indices for the requested forecast t_steps
+        t_abs = [n_hist + t for t in t_steps if (n_hist + t) < T_full]
+        t_lbls = [t for t in t_steps if (n_hist + t) < T_full]
+        fam_data[fam] = (y, yhat_l, yhat_f, t_abs, t_lbls)
+    if not fam_data:
         return None
-    y = d["target"][0]      # (T_total, *spatial, C) where T_total = n_hist + n_out (typically 128 = 64+64)
-    yhat = d["pred"][0]
-    T = y.shape[0]
-    # Plot FORECAST frames, not history. Pred is meaningful only on the future
-    # half (loss is masked to future during training); the history half of pred
-    # is unconstrained model output and should not be displayed.
-    n_hist = T // 2
-    t_abs = [n_hist + t for t in t_steps if (n_hist + t) < T]
-    t_labels = [t for t in t_steps if (n_hist + t) < T]
-    if not t_abs:
-        return None
-    if not t_steps:
-        return None
-    fig, axes = plt.subplots(2, len(t_abs),
-                              figsize=(2.0 * len(t_abs), 4.2),
-                              gridspec_kw={"wspace": 0.05, "hspace": 0.1})
-    if len(t_abs) == 1:
-        axes = axes.reshape(2, 1)
-    vmax = max(np.abs(y[t, ..., 0]).max() for t in t_abs)
-    vmax = max(vmax, max(np.abs(yhat[t, ..., 0]).max() for t in t_abs))
-    for j, (t, lbl) in enumerate(zip(t_abs, t_labels)):
-        for i in range(2):
-            axes[i, j].set_xticks([]); axes[i, j].set_yticks([])
-        axes[0, j].imshow(y[t, ..., 0], cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[1, j].imshow(yhat[t, ..., 0], cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[0, j].set_title(f"t={lbl}", fontsize=10)
-    axes[0, 0].set_ylabel("ground truth", rotation=0, ha="right", va="center", fontsize=10)
-    axes[1, 0].set_ylabel("LEMO-PC pred", rotation=0, ha="right", va="center", fontsize=10)
-    fig.suptitle(f"Rollout sequence: {FAM_LABELS[fam_pick]} family", fontsize=11)
-    out = FIG / "V02_rollout_sequence.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out
+
+    def _draw_heatmap(ax, field, vmax, cmap="RdBu_r"):
+        f_hi = zoom(field, UPSAMPLE, order=3)
+        H, W = field.shape
+        ax.imshow(f_hi, cmap=cmap, vmin=-vmax, vmax=vmax,
+                  interpolation="bilinear",
+                  extent=[-0.5, W - 0.5, H - 0.5, -0.5])
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_linewidth(0.6)
+
+    def _overlay_gt_contours(ax, y_gt, vmax):
+        H, W = y_gt.shape
+        pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
+        levels = np.concatenate([-pos_levels[::-1], pos_levels])
+        cs = ax.contour(np.arange(W), np.arange(H), y_gt, levels=levels,
+                         colors="black", linewidths=1.4)
+        try:
+            cs.set(path_effects=[halo])
+        except Exception:
+            for c in getattr(cs, "collections", []):
+                c.set_path_effects([halo])
+
+    # ====================================================================
+    # Option A: single family (Gauss by default), 2 rows × 5 cols
+    # ====================================================================
+    if fam_pick in fam_data:
+        y, yhat_l, yhat_f, t_abs, t_lbls = fam_data[fam_pick]
+        n_t = len(t_abs)
+        if yhat_f is not None and n_t > 0:
+            figA, axA = plt.subplots(2, n_t, figsize=(3.2 * n_t, 6.4),
+                                       gridspec_kw={"wspace": 0.04,
+                                                    "hspace": 0.07})
+            if n_t == 1:
+                axA = axA.reshape(2, 1)
+            row_labels = ["Ground Truth", "Error Difference"]
+            for i, lbl in enumerate(row_labels):
+                axA[i, 0].set_ylabel(lbl, fontsize=14, rotation=0,
+                                       ha="right", va="center", labelpad=20)
+            for j, (t, lbl) in enumerate(zip(t_abs, t_lbls)):
+                y_gt = y[t, ..., 0]
+                y_l = yhat_l[t, ..., 0]
+                y_f = yhat_f[t, ..., 0]
+                vmax = float(np.max([np.abs(v).max()
+                                       for v in (y_gt, y_l, y_f)]))
+                axA[0, j].set_title(f"t={lbl}", fontsize=13)
+                _draw_heatmap(axA[0, j], y_gt, vmax)
+                _overlay_gt_contours(axA[0, j], y_gt, vmax)
+                err_l = np.abs(y_l - y_gt)
+                err_f = np.abs(y_f - y_gt)
+                diff = err_l - err_f
+                diff_vmax = float(max(np.max(np.abs(diff)), 1e-9))
+                _draw_heatmap(axA[1, j], diff, diff_vmax)
+                _overlay_gt_contours(axA[1, j], y_gt, diff_vmax)
+            figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
+                          fontsize=18, y=0.99)
+            figA.tight_layout(rect=[0, 0, 1, 0.96])
+            out = FIG / "V02_rollout_sequence.pdf"
+            figA.savefig(out, bbox_inches="tight")
+            figA.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
+            plt.close(figA)
+
+    # ====================================================================
+    # Option B: 5 families × 5 timesteps grid of Error Difference only
+    # ====================================================================
+    fams_with_both = [f for f in FAMS
+                       if f in fam_data and fam_data[f][2] is not None
+                       and len(fam_data[f][3]) > 0]
+    if fams_with_both:
+        # Use the timesteps from the first family (all should match).
+        _, _, _, ref_t_abs, ref_t_lbls = fam_data[fams_with_both[0]]
+        n_t = len(ref_t_abs)
+        n_f = len(fams_with_both)
+        figB, axB = plt.subplots(n_f, n_t,
+                                   figsize=(2.2 * n_t, 2.2 * n_f),
+                                   gridspec_kw={"wspace": 0.04,
+                                                "hspace": 0.06})
+        if n_f == 1:
+            axB = axB.reshape(1, n_t)
+        for i, fam in enumerate(fams_with_both):
+            y, yhat_l, yhat_f, t_abs, t_lbls = fam_data[fam]
+            # diff_vmax shared across this family's timesteps for fairness
+            diffs = []
+            for t in t_abs:
+                yg = y[t, ..., 0]
+                el = np.abs(yhat_l[t, ..., 0] - yg)
+                ef = np.abs(yhat_f[t, ..., 0] - yg)
+                diffs.append(el - ef)
+            diff_vmax = float(max(np.max(np.abs(np.array(diffs))), 1e-9))
+            for j, (t, lbl, diff) in enumerate(zip(t_abs, t_lbls, diffs)):
+                if i == 0:
+                    axB[i, j].set_title(f"t={lbl}", fontsize=12)
+                _draw_heatmap(axB[i, j], diff, diff_vmax)
+                _overlay_gt_contours(axB[i, j], y[t, ..., 0],
+                                       diff_vmax)
+            axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
+                                   ha="right", va="center", labelpad=12)
+        figB.suptitle("Error Difference grid (rollout × family)",
+                       fontsize=16, y=0.995)
+        figB.tight_layout(rect=[0, 0, 1, 0.97])
+        outB = FIG / "V02_rollout_grid.pdf"
+        figB.savefig(outB, bbox_inches="tight")
+        figB.savefig(outB.with_suffix(".png"), dpi=300, bbox_inches="tight")
+        plt.close(figB)
+
+    return FIG / "V02_rollout_sequence.pdf"
 
 
 def fig_v03_error_maps(target_step: int = -1):
