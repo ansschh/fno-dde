@@ -1798,6 +1798,17 @@ def main():
         t_out = (args.n_hist + np.arange(args.n_out)) * args.dt
         write_shard(out_root, split, phi, y, params, t_hist, t_out)
 
+    # Read actual params_dim from the just-written shard so the manifest
+    # matches the data. dist_*_rd_2d families now write params_dim=5 (with
+    # kernel-shape extras); other families remain at 3.
+    actual_params_dim = 3
+    try:
+        sample_npz = out_root / "train" / "shard_000.npz"
+        if sample_npz.exists():
+            with np.load(sample_npz) as zf:
+                actual_params_dim = int(zf["params"].shape[-1])
+    except Exception:
+        pass
     manifest = {
         "family": args.family,
         "spatial_dims": 2,
@@ -1806,7 +1817,7 @@ def main():
         "n_hist": args.n_hist, "n_out": args.n_out,
         "n_samples": {"train": args.num_train, "val": args.num_val,
                        "test": args.num_test},
-        "params_dim": 3,
+        "params_dim": actual_params_dim,
         "source": "scripts/gen_dde_pde_data.py",
         "delay_relevance": "explicit u(x, t-tau) term in dynamics",
         "dt": args.dt,
