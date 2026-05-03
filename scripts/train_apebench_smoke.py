@@ -273,9 +273,23 @@ def main() -> None:
               f"opK={history['op_norm_max'][-1]:.3f}  t={elapsed:.0f}s")
         if val_rl2 < best_val:
             best_val = val_rl2
+            # Atomic save: write to .tmp, then rename. Avoids corrupt
+            # best_model.pt if the process is killed mid-write.
+            tmp_path = out_dir / "best_model.pt.tmp"
+            final_path = out_dir / "best_model.pt"
             torch.save({"model_state_dict": model.state_dict(),
                          "config": config, "epoch": epoch + 1},
-                        out_dir / "best_model.pt")
+                        tmp_path)
+            tmp_path.replace(final_path)
+        # Incremental history dump every 10 epochs so a mid-training crash
+        # doesn't wipe the per-epoch telemetry.
+        if (epoch + 1) % 10 == 0 or (epoch + 1) == args.epochs:
+            try:
+                hist_tmp = out_dir / "history.json.tmp"
+                json.dump(history, open(hist_tmp, "w"), indent=2)
+                hist_tmp.replace(out_dir / "history.json")
+            except Exception as _e:
+                pass  # don't fail training over a telemetry dump
 
     # Final test eval with best.
     ckpt = torch.load(out_dir / "best_model.pt", map_location=device, weights_only=False)

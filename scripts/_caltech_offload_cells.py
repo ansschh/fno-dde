@@ -1,17 +1,24 @@
 """Master cell list for the 6-pod RunPod offload of pending Caltech sweeps.
 
 Order matters — pods take a contiguous [START, START+COUNT) slice of this
-list, so cells must NEVER be reordered between pods. All 5 sweeps
-concatenated in this fixed order:
+list, so cells must NEVER be reordered between pods. Each cell carries
+ALL its training arguments (data-driven launcher invokes `train_apebench_smoke.py`
+with the cell's `args` list directly — no hardcoded values).
 
-  0-134   film_ablation       (135 cells: 3 models × 5 fams × 3 regs × 3 seeds)
-  135-194 sigma_sweep         (60  cells: 1 model × 5 fams × 4 sigmas × 3 seeds)
-  195-230 orbit_ood           (36  cells: 2 models × 1 fam × 2 OOD regs × 3 seeds × 3 quants)
-  231-290 memno_ffno          (60  cells: 2 models × 5 fams × 2 regimes × 3 seeds)
-  291-407 memory_aware        (117 cells: 3 models × 5 fams × 3 regs × 3 seeds, MINUS first 18
-                                 = 135 - 18 cells; first 18 stay on Caltech)
+Sweeps included:
+  film_ablation       (135 cells: 3 models × 5 fams × 3 regs × 3 seeds, residual_anchor)
+  sigma_sweep         (60  cells: 1 model × 5 fams × 4 sigmas × 3 seeds, residual_anchor + --sigma)
+  memno_ffno          (60  cells: 2 models × 5 fams × 2 regimes × 3 seeds, NO residual_anchor)
+  memory_aware        (117 cells: 3 models × 5 fams × 3 regs × 3 seeds, MINUS first 18
+                                  = 135 - 18 cells; first 18 stay on Caltech)
 
-Total: 408 cells. Assignment by throughput-weighted share across 6 pods.
+Total: 372 cells. Skips orbit_ood (needs pre-generated data_orbit_ood/m{1,2,4,8,16,32}/
+which lives only on Caltech; Caltech keeps that one).
+
+Output dir convention: every sweep writes to `outputs/{layer}_runpod/raw/{fam}/{reg}/{model}/s{seed}/`.
+The `/raw/` suffix is REQUIRED so the figure loaders (`viz_for`, `residuals_for`,
+`_viz_for_model_any_layer`) discover the checkpoints when the data is rsynced
+back to the local repo.
 """
 from __future__ import annotations
 import json
@@ -23,6 +30,38 @@ REGIMES = ("clean", "lowres", "noisy")
 SEEDS = (42, 123, 456)
 
 
+# Common training args shared across all sweeps.  Per-sweep overrides
+# (residual_anchor, sigma, output_dir, noise_std, downsample_factor) get
+# composed on top of these.
+def _base_args(model, fam, reg, seed, output_root,
+               noise_std=0.05, downsample_factor=2,
+               residual_anchor=False, sigma=None,
+               data_dir="data_dde_pde",
+               epochs=200, batch_size=4,
+               width=64, n_layers=3, lag_modes=24, spatial_modes=12):
+    args = [
+        "--family", fam,
+        "--model", model,
+        "--regime", reg,
+        "--noise_std", str(noise_std),
+        "--downsample_factor", str(downsample_factor),
+        "--epochs", str(epochs),
+        "--batch_size", str(batch_size),
+        "--width", str(width),
+        "--n_layers", str(n_layers),
+        "--lag_modes", str(lag_modes),
+        "--spatial_modes", str(spatial_modes),
+        "--seed", str(seed),
+        "--data_dir", data_dir,
+        "--output_dir", f"{output_root}/raw",
+    ]
+    if residual_anchor:
+        args.append("--residual_anchor")
+    if sigma is not None:
+        args.extend(["--sigma", str(sigma)])
+    return args
+
+
 def cells_film_ablation():
     cells = []
     for model in ("fno_film_nd", "noneq_film_nd", "lemo_bcorrect_nd"):
@@ -32,51 +71,37 @@ def cells_film_ablation():
                     cells.append({
                         "sweep": "film_ablation",
                         "fam": fam, "reg": reg, "seed": seed, "model": model,
-                        "out_dir": "outputs/film_ablation_runpod",
-                        "extra_flags": ["--residual_anchor"],
+                        "args": _base_args(model, fam, reg, seed,
+                                            output_root="outputs/film_ablation_runpod",
+                                            residual_anchor=True),
                     })
     return cells
 
 
 def cells_sigma_sweep():
+    """60 cells: 4 sigma × 5 fams × 3 seeds, lemo_pc_nd, residual_anchor.
+    Output dir is sigma-specific (mirrors Caltech sigma_sweep.sbatch behavior).
+    """
     cells = []
-    for fam in FAMS:
-        for sigma in (0.5, 1.0, 2.0, 4.0):
+    for sigma in (0.5, 0.7, 0.9, 0.99):
+        for fam in FAMS:
             for seed in SEEDS:
                 cells.append({
                     "sweep": "sigma_sweep",
                     "fam": fam, "reg": "clean", "seed": seed,
-                    "model": "lemo_pc_nd",
-                    "out_dir": "outputs/sigma_sweep_runpod",
-                    "extra_flags": ["--residual_anchor",
-                                    "--sigma_lipschitz", str(sigma)],
+                    "model": "lemo_pc_nd", "sigma": sigma,
+                    "args": _base_args("lemo_pc_nd", fam, "clean", seed,
+                                        output_root=f"outputs/sigma_{sigma}_runpod",
+                                        residual_anchor=True, sigma=sigma),
                 })
     return cells
 
 
-def cells_orbit_ood():
-    """36 cells: 2 models × 1 family (dist_exp_rd_2d_orbit) × 2 OOD-strength
-    regimes × 3 seeds × 3 OOD-quant settings.  This is the cleanest read of
-    slurm/orbit_ood.sbatch's array indexing — see that file for ground truth.
-    """
-    cells = []
-    for model in ("lemo_pc_nd", "per_lag_mlp_nd"):
-        for ood_strength in ("ood_low", "ood_high"):
-            for seed in SEEDS:
-                for ood_quant in (0, 1, 2):
-                    cells.append({
-                        "sweep": "orbit_ood",
-                        "fam": "dist_exp_rd_2d_orbit",
-                        "reg": "clean", "seed": seed, "model": model,
-                        "out_dir": "outputs/orbit_ood_runpod",
-                        "extra_flags": ["--residual_anchor",
-                                        "--ood_regime", ood_strength,
-                                        "--ood_quant", str(ood_quant)],
-                    })
-    return cells[:36]  # ensure exact count
-
-
 def cells_memno_ffno():
+    """60 cells: 2 models × 5 fams × 2 regs (lowres + noisy, since clean
+    coverage for memno/ffno was already done on Caltech) × 3 seeds.
+    NO residual_anchor (matches memno_ffno_sweep.sbatch).
+    """
     cells = []
     for model in ("memno_nd", "ffno_nd"):
         for fam in FAMS:
@@ -85,13 +110,17 @@ def cells_memno_ffno():
                     cells.append({
                         "sweep": "memno_ffno",
                         "fam": fam, "reg": reg, "seed": seed, "model": model,
-                        "out_dir": "outputs/memno_ffno_runpod",
-                        "extra_flags": [],
+                        "args": _base_args(model, fam, reg, seed,
+                                            output_root="outputs/memno_ffno_runpod",
+                                            residual_anchor=True),
                     })
     return cells
 
 
 def cells_memory_aware(skip_first: int = 18):
+    """135 cells, skip first N (Caltech is doing those).  3 models × 5 fams × 3 regs × 3 seeds.
+    NO residual_anchor (matches memory_aware_sweep.sbatch).
+    """
     cells = []
     for model in ("nide_nd", "ndde_nd", "s4_nd"):
         for fam in FAMS:
@@ -100,17 +129,17 @@ def cells_memory_aware(skip_first: int = 18):
                     cells.append({
                         "sweep": "memory_aware",
                         "fam": fam, "reg": reg, "seed": seed, "model": model,
-                        "out_dir": "outputs/memory_aware_runpod",
-                        "extra_flags": [],
+                        "args": _base_args(model, fam, reg, seed,
+                                            output_root="outputs/memory_aware_runpod",
+                                            residual_anchor=True),
                     })
-    return cells[skip_first:]  # leave first N to Caltech
+    return cells[skip_first:]
 
 
 def all_cells():
     cells = []
     cells.extend(cells_film_ablation())
     cells.extend(cells_sigma_sweep())
-    cells.extend(cells_orbit_ood())
     cells.extend(cells_memno_ffno())
     cells.extend(cells_memory_aware(skip_first=18))
     return cells

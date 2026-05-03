@@ -60,10 +60,11 @@ else
   echo "[bootstrap] data already present, skipping gen."
 fi
 
-# 4. Smoke test: 5-epoch single cell on GPU 0, verify per-epoch < 50s.
+# 4. Smoke test: 5-epoch single cell on GPU 0 + verify save/load round-trip.
 SMOKE_LOG=train_logs/offload/_smoke.log
 mkdir -p train_logs/offload
 echo "[bootstrap] running 5-epoch smoke test on GPU 0..."
+rm -rf outputs/_smoke
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
   python3 -u scripts/train_apebench_smoke.py \
   --family dist_exp_rd_2d --model lemo_pc_nd --regime clean \
@@ -75,11 +76,35 @@ CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
   --output_dir outputs/_smoke \
   --residual_anchor \
   > "$SMOKE_LOG" 2>&1
-EPOCH_TIME=$(grep -oE 'epoch_time=[0-9.]+' "$SMOKE_LOG" | tail -1 | grep -oE '[0-9.]+' || echo "999")
-echo "[bootstrap] smoke test per-epoch: $EPOCH_TIME s"
-if [ -n "$EPOCH_TIME" ] && (( $(echo "$EPOCH_TIME > 50" | bc -l) )); then
+SMOKE_RC=$?
+if [ $SMOKE_RC -ne 0 ]; then
+  echo "[bootstrap] FATAL: smoke test trainer exited rc=$SMOKE_RC. Last 30 lines:"
+  tail -30 "$SMOKE_LOG"
+  echo "[bootstrap] aborting — refusing to launch sweep with broken pipeline."
+  exit 3
+fi
+# Verify the full trinity of output files exists and is loadable.
+SMOKE_DIR=outputs/_smoke/dist_exp_rd_2d/clean/lemo_pc_nd/s42
+for f in best_model.pt history.json test_results.json; do
+  if [ ! -s "$SMOKE_DIR/$f" ]; then
+    echo "[bootstrap] FATAL: smoke test missing/empty $SMOKE_DIR/$f"
+    tail -30 "$SMOKE_LOG"
+    exit 4
+  fi
+done
+# Round-trip: ensure best_model.pt loads cleanly via torch.
+python3 - <<PYEOF || { echo "[bootstrap] FATAL: best_model.pt corrupt"; exit 5; }
+import torch
+ckpt = torch.load("$SMOKE_DIR/best_model.pt", map_location="cpu", weights_only=False)
+assert "model_state_dict" in ckpt and "config" in ckpt, "missing keys in ckpt"
+print(f"[smoke-verify] best_model.pt loads OK ({len(ckpt['model_state_dict'])} tensors, epoch {ckpt['epoch']})")
+PYEOF
+EPOCH_TIME=$(grep -oE 'wall_per_epoch_s.*[0-9.]+' "$SMOKE_LOG" | tail -1 | grep -oE '[0-9.]+$' || echo "")
+echo "[bootstrap] smoke test PASSED.  per-epoch wall: ${EPOCH_TIME:-unknown}s"
+if [ -n "$EPOCH_TIME" ] && (( $(echo "$EPOCH_TIME > 50" | bc -l 2>/dev/null || echo 0) )); then
   echo "[bootstrap] WARNING: per-epoch > 50s ($EPOCH_TIME). Continuing anyway (user override)."
 fi
+rm -rf outputs/_smoke
 
 # 5. Launch the actual sweep.
 START=${1:-0}; COUNT=${2:-50}; NGPU=${3:-8}
