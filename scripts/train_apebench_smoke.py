@@ -72,7 +72,8 @@ def _compute_op_norm_max(model: torch.nn.Module) -> float:
     with torch.no_grad():
         for mod in model.modules():
             w = getattr(mod, "weights", None)
-            if w is None or not torch.is_complex(w) or w.dim() != 3:
+            if (w is None or not isinstance(w, torch.Tensor)
+                    or not torch.is_complex(w) or w.dim() != 3):
                 continue
             Km = w.permute(2, 0, 1).contiguous()  # (modes, in, out)
             try:
