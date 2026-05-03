@@ -72,103 +72,144 @@ def load_viz_fno(fam, regime="clean", seed="s42"):
 
 def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                               sample_idx: int = 0):
-    """Per-family contour-overlay panels, 1 row × N cols (one per family with
-    both LEMO-PC AND FNO+FiLM viz data available — no N/A cells).
+    """Per-family field viz — generates two variants:
 
-    Each panel: GT colormap background + 3 contour sets:
-      - GT level sets               (black solid, lw=1.6)
-      - LEMO-PC predicted levels    (red solid, lw=1.6)
-      - FNO+FiLM predicted levels   (cyan dashed, lw=1.6)
+      V01_family_triptych.{pdf,png}      3 rows × N cols
+        rows = [GT, LEMO-PC pred, FNO+FiLM pred]; each cell is the field as
+        a heatmap with GT iso-contours overlaid (so you can see where each
+        prediction tracks the GT structure).
 
-    Where red lies on black → LEMO got it right. Where cyan deviates from
-    black → FNO+FiLM missed. Architectural contrast visible at a glance.
+      V01_family_triptych_diff.{pdf,png} 3 rows × N cols
+        rows = [LEMO-PC pred, FNO+FiLM pred, signed error |LEMO err| - |FNO err|]
+        bottom row = where LEMO beats FNO (negative, blue) vs where FNO beats
+        LEMO (positive, red). GT iso-contours overlaid on bottom row.
+
+    Background: high-fidelity RdBu_r diverging colormap (matches the localNO
+    aesthetic). 32× cubic-spline upsample of the 64×64 field (2048×2048
+    source per panel) for the very-fine-grained look.
     """
+    from scipy.ndimage import zoom
+    import matplotlib.patheffects as pe
+    halo = pe.withStroke(linewidth=3.5, foreground="white")
+
+    UPSAMPLE = 32
+
     panels = []
     for fam in FAMS:
         dl = load_viz(fam)
         if dl is None:
             continue
-        df = load_viz_fno(fam)  # may be None if FNO+FiLM viz unavailable
-        y = dl["target"][sample_idx]
-        yhat_l = dl["pred"][sample_idx]
-        y_l = y[target_step, ..., 0]
-        yhL = yhat_l[target_step, ..., 0]
-        if df is not None:
-            yhF = df["pred"][sample_idx][target_step, ..., 0]
-        else:
-            yhF = None  # plot panel with GT+LEMO only, omit FNO contour
-        panels.append((fam, y_l, yhL, yhF))
+        df = load_viz_fno(fam)
+        y_gt = dl["target"][sample_idx][target_step, ..., 0]
+        y_lemo = dl["pred"][sample_idx][target_step, ..., 0]
+        y_fno = (df["pred"][sample_idx][target_step, ..., 0]
+                  if df is not None else None)
+        panels.append((fam, y_gt, y_lemo, y_fno))
     if not panels:
         return None
-
     n = len(panels)
-    fig, axes = plt.subplots(1, n, figsize=(5.0 * n, 5.6),
-                              gridspec_kw={"wspace": 0.06})
-    if n == 1:
-        axes = [axes]
 
-    import matplotlib.patheffects as pe
-    halo = pe.withStroke(linewidth=4, foreground="white")
-
-    for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
-        all_arrs = [y_l, yhL] + ([yhF] if yhF is not None else [])
-        vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
-        H, W = y_l.shape
-        pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
-        levels = np.concatenate([-pos_levels[::-1], pos_levels])
-
-        # Native 64x64 GT field — keep the original resolution rather than
-        # upsampling. Bicubic interpolation in imshow handles screen smoothing.
-        ax.imshow(y_l, cmap="viridis", vmin=-vmax, vmax=vmax,
-                  interpolation="bicubic")
-        xs, ys = np.arange(W), np.arange(H)
-
-        # GT — thick solid black with halo
-        cs_gt = ax.contour(xs, ys, y_l, levels=levels,
-                            colors="black", linewidths=3.0)
-        # LEMO-PC — solid red with halo
-        cs_lemo = ax.contour(xs, ys, yhL, levels=levels,
-                              colors="#ff2a2a", linewidths=2.2)
-        for cs in (cs_gt, cs_lemo):
-            try:
-                cs.set(path_effects=[halo])
-            except Exception:
-                for c in getattr(cs, "collections", []):
-                    c.set_path_effects([halo])
-        if yhF is not None:
-            # FNO+FiLM — DOTTED cyan (visually distinct from LEMO solid even
-            # at exact overlap points; dashes are too easily confused with
-            # solids when crossing).
-            cs_fno = ax.contour(xs, ys, yhF, levels=levels,
-                                  colors="#00d8ff", linewidths=2.0,
-                                  linestyles="dotted")
-            try:
-                cs_fno.set(path_effects=[halo])
-            except Exception:
-                for c in getattr(cs_fno, "collections", []):
-                    c.set_path_effects([halo])
+    def _draw_heatmap(ax, field, vmax, cmap="RdBu_r"):
+        """Upsampled imshow of `field`."""
+        f_hi = zoom(field, UPSAMPLE, order=3)
+        H, W = field.shape
+        ax.imshow(f_hi, cmap=cmap, vmin=-vmax, vmax=vmax,
+                  interpolation="bilinear",
+                  extent=[-0.5, W - 0.5, H - 0.5, -0.5])
         ax.set_xticks([]); ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
-        ax.set_title(FAM_LABELS[fam], fontsize=12)
 
-    # Single shared legend at the bottom
-    handles = [
-        plt.Line2D([0], [0], color="black", lw=3.0, label="ground truth"),
-        plt.Line2D([0], [0], color="#ff2a2a", lw=2.2, label="LEMO-PC pred"),
-        plt.Line2D([0], [0], color="#00d8ff", lw=2.0, ls=":",
-                    label="FNO+FiLM pred"),
-    ]
-    fig.legend(handles=handles, loc="lower center",
-                bbox_to_anchor=(0.5, -0.02),
-                ncol=3, frameon=False, fontsize=10)
+    def _overlay_gt_contours(ax, y_gt, vmax):
+        H, W = y_gt.shape
+        pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
+        levels = np.concatenate([-pos_levels[::-1], pos_levels])
+        cs = ax.contour(np.arange(W), np.arange(H), y_gt, levels=levels,
+                         colors="black", linewidths=1.5)
+        try:
+            cs.set(path_effects=[halo])
+        except Exception:
+            for c in getattr(cs, "collections", []):
+                c.set_path_effects([halo])
 
-    fig.suptitle("Predicted vs GT contours", fontsize=16, y=1.02)
-    fig.tight_layout(rect=[0, 0.04, 1, 0.96])
+    # ----- Variant A: GT / LEMO / FNO heatmaps (3 rows × N cols) -----
+    fig, axes = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
+                              gridspec_kw={"wspace": 0.04, "hspace": 0.07})
+    if n == 1:
+        axes = axes.reshape(3, 1)
+
+    row_labels = ["Ground Truth", "LEMO-PC", "FNO+FiLM"]
+    for i, lbl in enumerate(row_labels):
+        axes[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
+                                va="center", labelpad=20, fontweight="bold")
+    for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
+        all_arrs = [y_gt, y_lemo] + ([y_fno] if y_fno is not None else [])
+        vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
+        axes[0, j].set_title(FAM_LABELS[fam], fontsize=14)
+        _draw_heatmap(axes[0, j], y_gt, vmax)
+        _overlay_gt_contours(axes[0, j], y_gt, vmax)
+        _draw_heatmap(axes[1, j], y_lemo, vmax)
+        _overlay_gt_contours(axes[1, j], y_gt, vmax)
+        if y_fno is not None:
+            _draw_heatmap(axes[2, j], y_fno, vmax)
+            _overlay_gt_contours(axes[2, j], y_gt, vmax)
+        else:
+            axes[2, j].set_xticks([]); axes[2, j].set_yticks([])
+            for sp in axes[2, j].spines.values():
+                sp.set_linewidth(0.6)
+            axes[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
+                              transform=axes[2, j].transAxes,
+                              color="dimgrey", fontsize=12)
+
+    fig.suptitle("Predicted vs GT fields", fontsize=18, y=0.99,
+                 fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=400, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+    # ----- Variant B: LEMO / FNO / signed-difference (3 rows × N cols) -----
+    fig2, axes2 = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
+                                  gridspec_kw={"wspace": 0.04, "hspace": 0.07})
+    if n == 1:
+        axes2 = axes2.reshape(3, 1)
+    row_labels2 = ["LEMO-PC", "FNO+FiLM", "|LEMO err| − |FNO err|"]
+    for i, lbl in enumerate(row_labels2):
+        axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
+                                 va="center", labelpad=20, fontweight="bold")
+    for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
+        all_arrs = [y_gt, y_lemo] + ([y_fno] if y_fno is not None else [])
+        vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
+        axes2[0, j].set_title(FAM_LABELS[fam], fontsize=14)
+        _draw_heatmap(axes2[0, j], y_lemo, vmax)
+        _overlay_gt_contours(axes2[0, j], y_gt, vmax)
+        if y_fno is not None:
+            _draw_heatmap(axes2[1, j], y_fno, vmax)
+            _overlay_gt_contours(axes2[1, j], y_gt, vmax)
+            # Diff: |LEMO err| - |FNO err|. Negative (blue) = LEMO better,
+            # Positive (red) = FNO better.
+            err_l = np.abs(y_lemo - y_gt)
+            err_f = np.abs(y_fno - y_gt)
+            diff = err_l - err_f
+            diff_vmax = float(np.max(np.abs(diff)))
+            _draw_heatmap(axes2[2, j], diff, diff_vmax)
+            _overlay_gt_contours(axes2[2, j], y_gt, diff_vmax)
+        else:
+            for r in (1, 2):
+                axes2[r, j].set_xticks([]); axes2[r, j].set_yticks([])
+                for sp in axes2[r, j].spines.values():
+                    sp.set_linewidth(0.6)
+                axes2[r, j].text(0.5, 0.5, "n/a", ha="center", va="center",
+                                   transform=axes2[r, j].transAxes,
+                                   color="dimgrey", fontsize=12)
+    fig2.suptitle("Predictions and error advantage  (blue ⇒ LEMO better, red ⇒ FNO+FiLM better)",
+                   fontsize=14, y=0.99, fontweight="bold")
+    fig2.tight_layout(rect=[0, 0, 1, 0.96])
+    out2 = FIG / "V01_family_triptych_diff.pdf"
+    fig2.savefig(out2, bbox_inches="tight")
+    fig2.savefig(out2.with_suffix(".png"), dpi=300, bbox_inches="tight")
+    plt.close(fig2)
     return out
 
 
