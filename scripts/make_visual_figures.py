@@ -111,7 +111,8 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     from scipy.ndimage import zoom
     halo = pe.withStroke(linewidth=4, foreground="white")
 
-    UPSAMPLE = 4   # 64x64 -> 256x256 via cubic interpolation for finer heatmap
+    UPSAMPLE = 16  # 64x64 -> 1024x1024 via cubic spline. Beyond this, returns
+                   # diminish (no new information; spline starts to ring).
 
     for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
         all_arrs = [y_l, yhL] + ([yhF] if yhF is not None else [])
