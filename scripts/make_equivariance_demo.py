@@ -87,40 +87,39 @@ def main():
             errs.append(num / den)
             left_panels.append(y_shift[0, t_show, ..., chan].cpu().numpy())
             right_panels.append(y_roll[0, t_show, ..., chan].cpu().numpy())
-    # Shared symmetric colour limits across the field rows.
-    vmax = max(max(np.abs(a).max() for a in left_panels),
-               max(np.abs(a).max() for a in right_panels))
-    # Per-column difference for the equivariance row (|row1 - row2|).
+    # Per-column difference: |LEMO(ρ_k x) - ρ_k LEMO(x)|.
+    # If T1 holds, every panel is near-black (FP32 floor).
     diff_panels = [np.abs(t - b) for t, b in zip(left_panels, right_panels)]
-    diff_vmax = max(max(d.max() for d in diff_panels), 1e-9)
+    diff_vmax = float(max(max(d.max() for d in diff_panels), 1e-9))
+    # 32x cubic upsample to match V01 aesthetic.
+    from scipy.ndimage import zoom as _zoom
+    UPSAMPLE = 32
 
-    # 3 rows: LEMO(ρ_k x), ρ_k LEMO(x), |difference|.
-    fig, axes = plt.subplots(3, len(SHIFTS), figsize=(2.2 * len(SHIFTS), 6.2),
-                              gridspec_kw={"wspace": 0.05, "hspace": 0.10})
+    fig, axes = plt.subplots(1, len(SHIFTS), figsize=(3.5 * len(SHIFTS), 4.0),
+                              gridspec_kw={"wspace": 0.05})
     if len(SHIFTS) == 1:
-        axes = axes.reshape(3, 1)
-
-    for j, (k, top, bot, diff, err) in enumerate(
-            zip(SHIFTS, left_panels, right_panels, diff_panels, errs)):
-        for ax in axes[:, j]:
-            ax.set_xticks([]); ax.set_yticks([])
-        axes[0, j].imshow(top, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[1, j].imshow(bot, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[2, j].imshow(diff, cmap="magma", vmin=0, vmax=diff_vmax)
-        axes[0, j].set_title(f"$k = {k}$", fontsize=11)
-        axes[2, j].text(0.02, 0.98, f"$e_k = {err:.1e}$",
-                          transform=axes[2, j].transAxes, fontsize=9,
-                          va="top", ha="left", color="white",
-                          bbox=dict(boxstyle="round,pad=0.2", facecolor="black",
-                                      alpha=0.6, edgecolor="none"))
-    axes[0, 0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x)$",
-                            rotation=0, ha="right", va="center", fontsize=11)
-    axes[1, 0].set_ylabel(r"$\rho_k\,\mathrm{LEMO}(x)$",
-                            rotation=0, ha="right", va="center", fontsize=11)
-    axes[2, 0].set_ylabel(r"$|\,\mathrm{row\ 1} - \mathrm{row\ 2}\,|$",
-                            rotation=0, ha="right", va="center", fontsize=10)
-    fig.suptitle("Cyclic-shift equivariance",
-                 fontsize=14, y=1.0)
+        axes = [axes]
+    for j, (k, diff, err) in enumerate(zip(SHIFTS, diff_panels, errs)):
+        ax = axes[j]
+        d_hi = _zoom(diff, UPSAMPLE, order=3)
+        d_hi = np.clip(d_hi, 0, None)  # avoid bicubic-induced negatives
+        ax.imshow(d_hi, cmap="magma", vmin=0, vmax=diff_vmax,
+                  interpolation="bilinear",
+                  extent=[-0.5, diff.shape[1] - 0.5,
+                          diff.shape[0] - 0.5, -0.5])
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_linewidth(0.6)
+        ax.set_title(f"$k = {k}$", fontsize=12)
+        ax.text(0.02, 0.98, f"$e_k = {err:.1e}$",
+                  transform=ax.transAxes, fontsize=10,
+                  va="top", ha="left", color="white",
+                  bbox=dict(boxstyle="round,pad=0.2", facecolor="black",
+                              alpha=0.6, edgecolor="none"))
+    axes[0].set_ylabel(r"$|\,\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\,|$",
+                         rotation=90, ha="center", va="center", fontsize=11,
+                         labelpad=10)
+    fig.suptitle("Cyclic-shift equivariance", fontsize=14, y=1.0)
     out = FIG / "M4_equivariance_demo.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
