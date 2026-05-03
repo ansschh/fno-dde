@@ -231,22 +231,20 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
 
     for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
         axes2[0, j].set_title(FAM_LABELS[fam], fontsize=14)
-        # Row 1: ground truth field — per-cell vmax + colorbar
+        # Row 1: ground truth field — per-cell vmax, no colorbar (uncluttered)
         gt_v = float(np.abs(y_gt).max())
-        _draw_heatmap(axes2[0, j], y_gt, gt_v, add_cbar=True)
+        _draw_heatmap(axes2[0, j], y_gt, gt_v)
         _overlay_gt_contours(axes2[0, j], y_gt, gt_v)
-        # Row 2: signed LEMO error — mild power-norm (gamma=0.7) + colorbar
+        # Row 2: signed LEMO error — mild power-norm (gamma=0.7)
         lemo_err_signed = y_lemo - y_gt
         le_v = float(max(np.abs(lemo_err_signed).max(), 1e-9))
-        _draw_heatmap(axes2[1, j], lemo_err_signed, le_v,
-                       scale="mild", add_cbar=True)
+        _draw_heatmap(axes2[1, j], lemo_err_signed, le_v, scale="mild")
         _overlay_gt_contours(axes2[1, j], y_gt, le_v)
-        # Row 3: |LEMO err| − |FNO err| — mild power-norm + colorbar
+        # Row 3: |LEMO err| − |FNO err| — mild power-norm
         if y_fno is not None:
             diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
             dd_v = float(max(np.abs(diff).max(), 1e-9))
-            _draw_heatmap(axes2[2, j], diff, dd_v,
-                           scale="mild", add_cbar=True)
+            _draw_heatmap(axes2[2, j], diff, dd_v, scale="mild")
             _overlay_gt_contours(axes2[2, j], y_gt, dd_v)
         else:
             axes2[2, j].set_xticks([]); axes2[2, j].set_yticks([])
