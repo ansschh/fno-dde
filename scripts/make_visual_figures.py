@@ -107,22 +107,45 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     if n == 1:
         axes = [axes]
 
+    import matplotlib.patheffects as pe
+    halo = pe.withStroke(linewidth=4, foreground="white")
+
     for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
         all_arrs = [y_l, yhL] + ([yhF] if yhF is not None else [])
         vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
         H, W = y_l.shape
         pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
         levels = np.concatenate([-pos_levels[::-1], pos_levels])
-        ax.imshow(y_l, cmap="Greys", vmin=-vmax, vmax=vmax,
-                  interpolation="bilinear", alpha=0.45)
-        ax.contour(np.arange(W), np.arange(H), y_l, levels=levels,
-                    colors="black", linewidths=2.4, alpha=1.0)
-        ax.contour(np.arange(W), np.arange(H), yhL, levels=levels,
-                    colors="#d62728", linewidths=1.8, alpha=0.95)
+        xs, ys = np.arange(W), np.arange(H)
+
+        # High-res viridis background — perceptually uniform; no conflict with
+        # black/red/cyan contour colours.
+        ax.imshow(y_l, cmap="viridis", vmin=-vmax, vmax=vmax,
+                  interpolation="bicubic")
+
+        # Plot contours with path-effect halos so each line stays visible
+        # even when overlapping. Width-descending order so each line still
+        # peeks out from underneath the next.
+        cs_gt = ax.contour(xs, ys, y_l, levels=levels,
+                            colors="black", linewidths=3.0)
+        cs_lemo = ax.contour(xs, ys, yhL, levels=levels,
+                              colors="#ff2a2a", linewidths=2.0)
+        for cs in (cs_gt, cs_lemo):
+            try:
+                cs.set(path_effects=[halo])
+            except Exception:
+                # matplotlib <3.8 fallback: iterate collections
+                for c in getattr(cs, "collections", []):
+                    c.set_path_effects([halo])
         if yhF is not None:
-            ax.contour(np.arange(W), np.arange(H), yhF, levels=levels,
-                        colors="#0091c5", linewidths=1.8, alpha=0.95,
-                        linestyles="dashed")
+            cs_fno = ax.contour(xs, ys, yhF, levels=levels,
+                                  colors="#00d8ff", linewidths=1.5,
+                                  linestyles="dashed")
+            try:
+                cs_fno.set(path_effects=[halo])
+            except Exception:
+                for c in getattr(cs_fno, "collections", []):
+                    c.set_path_effects([halo])
         ax.set_xticks([]); ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
@@ -130,9 +153,9 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
 
     # Single shared legend at the bottom
     handles = [
-        plt.Line2D([0], [0], color="black", lw=1.7, label="ground truth"),
-        plt.Line2D([0], [0], color="#d62728", lw=1.7, label="LEMO-PC pred"),
-        plt.Line2D([0], [0], color="#17becf", lw=1.7, ls="--",
+        plt.Line2D([0], [0], color="black", lw=3.0, label="ground truth"),
+        plt.Line2D([0], [0], color="#ff2a2a", lw=2.0, label="LEMO-PC pred"),
+        plt.Line2D([0], [0], color="#00d8ff", lw=1.5, ls="--",
                     label="FNO+FiLM pred"),
     ]
     fig.legend(handles=handles, loc="lower center",
@@ -145,7 +168,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     fig.tight_layout(rect=[0, 0.04, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
     return out
 
