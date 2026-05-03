@@ -30,12 +30,13 @@ from matplotlib.colors import SymLogNorm, LinearSegmentedColormap
 # Endpoints are light salmon / light blue rather than saturated red/blue.
 PASTEL_DIV = LinearSegmentedColormap.from_list(
     "pastel_div",
-    [(0.00, "#3e6fa3"),  # mid-saturated blue (deepest features)
-     (0.20, "#9bbcd6"),  # light blue
-     (0.45, "#e8eef4"),  # near-white
-     (0.55, "#f4ece8"),  # near-white warm side
-     (0.80, "#e8a48f"),  # light salmon
-     (1.00, "#bf5a45")]  # mid-saturated red (deepest features)
+    [(0.00, "#0b3d6b"),  # deep navy blue (strong features pop)
+     (0.18, "#3e6fa3"),  # medium blue
+     (0.40, "#bccfde"),  # pale blue
+     (0.50, "#f4ece8"),  # near-white at zero
+     (0.60, "#e8a48f"),  # light salmon
+     (0.82, "#bf5a45"),  # medium red
+     (1.00, "#7a1f10")]  # deep red (strong features pop)
 )
 import numpy as np
 
@@ -224,17 +225,17 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                             headroom=1.0, return_im=True)
         if j == n - 1: im_gt = im
         _overlay_gt_contours(axes2[0, j], y_gt, gt_vmax)
-        # Row 2: signed LEMO error — linear, pastel headroom 1.4
+        # Row 2: signed LEMO error — symlog (amplifies small errors)
         lemo_err_signed = y_lemo - y_gt
         im = _draw_heatmap(axes2[1, j], lemo_err_signed, lemo_err_vmax,
-                            headroom=1.4, return_im=True)
+                            symlog=True, return_im=True)
         if j == n - 1: im_le = im
         _overlay_gt_contours(axes2[1, j], y_gt, lemo_err_vmax)
-        # Row 3: |LEMO err| − |FNO err| — linear, pastel
+        # Row 3: |LEMO err| − |FNO err| — symlog
         if y_fno is not None:
             diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
             im = _draw_heatmap(axes2[2, j], diff, diff_vmax,
-                                headroom=1.4, return_im=True)
+                                symlog=True, return_im=True)
             if j == n - 1: im_dd = im
             _overlay_gt_contours(axes2[2, j], y_gt, diff_vmax)
         else:
@@ -366,7 +367,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 err_f = np.abs(y_f - y_gt)
                 diff = err_l - err_f
                 diff_vmax = float(max(np.max(np.abs(diff)), 1e-9))
-                _draw_heatmap(axA[1, j], diff, diff_vmax, headroom=1.4)
+                _draw_heatmap(axA[1, j], diff, diff_vmax, symlog=True)
                 _overlay_gt_contours(axA[1, j], y_gt, diff_vmax)
             figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
                           fontsize=18, y=0.99)
@@ -406,7 +407,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
             for j, (t, lbl, diff) in enumerate(zip(t_abs, t_lbls, diffs)):
                 if i == 0:
                     axB[i, j].set_title(f"t={lbl}", fontsize=12)
-                _draw_heatmap(axB[i, j], diff, diff_vmax, headroom=1.4)
+                _draw_heatmap(axB[i, j], diff, diff_vmax, symlog=True)
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0],
                                        diff_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
