@@ -59,50 +59,96 @@ def _sym_lim(arr):
     return -v, v
 
 
-def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0):
-    """5 rows x 3 cols: (early-history input frame | target final frame | LEMO-PC pred final frame).
+FNO_BASE = REPO / "outputs" / "film_ablation_caltech" / "raw"
 
-    Uses the FIRST history frame (hist_step=0) because residual-anchor input
-    has signal[n_hist-1]=0 by construction (the anchor is the last history
-    frame, so its residual is zero).  hist_step=0 shows actual content.
-    Per-row shared symmetric colour limits (computed from the union of input,
-    target, pred at this row) so amplitudes are directly comparable.
-    """
-    rows = []
-    for fam in FAMS:
-        d = load_viz(fam)
-        if d is None:
-            continue
-        x = d["input"][0]
-        y = d["target"][0]
-        yhat = d["pred"][0]
-        x_l = x[hist_step, ..., 0]
-        y_l = y[target_step, ..., 0]
-        yh_l = yhat[target_step, ..., 0]
-        rows.append((fam, x_l, y_l, yh_l))
-    if not rows:
+
+def load_viz_fno(fam, regime="clean", seed="s42"):
+    """Load FNO+FiLM viz_samples.npz from local outputs/."""
+    p = FNO_BASE / fam / regime / "fno_film_nd" / seed / "viz_samples.npz"
+    if not p.exists():
         return None
-    n = len(rows)
-    fig, axes = plt.subplots(n, 3, figsize=(7.5, 2.0 * n),
-                              gridspec_kw={"wspace": 0.05, "hspace": 0.15})
+    return np.load(p)
+
+
+def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
+                              sample_idx: int = 0):
+    """Per-family contour-overlay panels, 1 row × N cols (one per family with
+    both LEMO-PC AND FNO+FiLM viz data available — no N/A cells).
+
+    Each panel: GT colormap background + 3 contour sets:
+      - GT level sets               (black solid, lw=1.6)
+      - LEMO-PC predicted levels    (red solid, lw=1.6)
+      - FNO+FiLM predicted levels   (cyan dashed, lw=1.6)
+
+    Where red lies on black → LEMO got it right. Where cyan deviates from
+    black → FNO+FiLM missed. Architectural contrast visible at a glance.
+    """
+    panels = []
+    for fam in FAMS:
+        dl = load_viz(fam)
+        if dl is None:
+            continue
+        df = load_viz_fno(fam)
+        if df is None:
+            continue  # skip families where we lack a baseline (no N/A cells)
+        y = dl["target"][sample_idx]
+        yhat_l = dl["pred"][sample_idx]
+        yhat_f = df["pred"][sample_idx]
+        y_l = y[target_step, ..., 0]
+        yhL = yhat_l[target_step, ..., 0]
+        yhF = yhat_f[target_step, ..., 0]
+        panels.append((fam, y_l, yhL, yhF))
+    if not panels:
+        return None
+
+    n = len(panels)
+    fig, axes = plt.subplots(1, n, figsize=(5.0 * n, 5.6),
+                              gridspec_kw={"wspace": 0.06})
     if n == 1:
-        axes = axes.reshape(1, 3)
-    col_titles = [f"history frame (t=0)", "ground truth (final)", "LEMO-PC pred (final)"]
-    for j, t in enumerate(col_titles):
-        axes[0, j].set_title(t, fontsize=10)
-    for i, (fam, x_l, y_l, yh_l) in enumerate(rows):
-        vmax = max(np.abs(x_l).max(), np.abs(y_l).max(), np.abs(yh_l).max())
-        for ax in axes[i]:
-            ax.set_xticks([]); ax.set_yticks([])
-        axes[i, 0].imshow(x_l, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[i, 1].imshow(y_l, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[i, 2].imshow(yh_l, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[i, 0].set_ylabel(FAM_LABELS[fam], rotation=0, ha="right", va="center", fontsize=10)
-    fig.suptitle("Per-family input / ground truth / LEMO-PC prediction (residual-anchor space)",
-                 fontsize=11)
+        axes = [axes]
+
+    for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
+        vmax = float(np.max([np.abs(v).max() for v in (y_l, yhL, yhF)]))
+        H, W = y_l.shape
+        # Contour levels: 7 spanning the meaningful range, asymmetric around 0
+        # so we avoid the degenerate zero crossing.
+        pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
+        levels = np.concatenate([-pos_levels[::-1], pos_levels])
+        # Background: faded greyscale so colored contours pop more.
+        ax.imshow(y_l, cmap="Greys", vmin=-vmax, vmax=vmax,
+                  interpolation="bilinear", alpha=0.45)
+        # Contours: GT (black solid, thicker), LEMO (red solid),
+        # FNO+FiLM (cyan dashed, longer dashes).
+        ax.contour(np.arange(W), np.arange(H), y_l, levels=levels,
+                    colors="black", linewidths=2.4, alpha=1.0)
+        ax.contour(np.arange(W), np.arange(H), yhL, levels=levels,
+                    colors="#d62728", linewidths=1.8, alpha=0.95)
+        ax.contour(np.arange(W), np.arange(H), yhF, levels=levels,
+                    colors="#0091c5", linewidths=1.8, alpha=0.95,
+                    linestyles="dashed")
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_linewidth(0.6)
+        ax.set_title(FAM_LABELS[fam], fontsize=12)
+
+    # Single shared legend at the bottom
+    handles = [
+        plt.Line2D([0], [0], color="black", lw=1.7, label="ground truth"),
+        plt.Line2D([0], [0], color="#d62728", lw=1.7, label="LEMO-PC pred"),
+        plt.Line2D([0], [0], color="#17becf", lw=1.7, ls="--",
+                    label="FNO+FiLM pred"),
+    ]
+    fig.legend(handles=handles, loc="lower center",
+                bbox_to_anchor=(0.5, -0.02),
+                ncol=3, frameon=False, fontsize=10)
+
+    fig.suptitle("Final-frame contour overlay, per family "
+                 f"(sample idx = {sample_idx}, deterministic)",
+                 fontsize=12, y=1.02)
+    fig.tight_layout(rect=[0, 0.04, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out
 
