@@ -26,18 +26,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm, LinearSegmentedColormap, FuncNorm
 
-# Custom pastel-diverging colormap matching the localNO paper aesthetic.
-# Endpoints are light salmon / light blue rather than saturated red/blue.
-PASTEL_DIV = LinearSegmentedColormap.from_list(
-    "pastel_div",
-    [(0.00, "#0b3d6b"),  # deep navy blue (strong features pop)
-     (0.18, "#3e6fa3"),  # medium blue
-     (0.40, "#bccfde"),  # pale blue
-     (0.50, "#f4ece8"),  # near-white at zero
-     (0.60, "#e8a48f"),  # light salmon
-     (0.82, "#bf5a45"),  # medium red
-     (1.00, "#7a1f10")]  # deep red (strong features pop)
-)
+# Use matplotlib's standard RdBu_r diverging colormap. Bold saturated reds and
+# blues at extremes, white at zero — gives the strongest contrast for error/diff
+# visualisation and matches the bolder pre-pastel iteration.
+PASTEL_DIV = "RdBu_r"
 import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
@@ -202,20 +194,10 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     plt.close(fig)
 
     # ----- Variant B: GT / LEMO Error / Err Diff (3 rows × N cols) -----
-    # Compute SHARED per-row vmax across all families so colors are comparable
-    # within a row, and one colorbar per row is enough.
-    gt_vmax = float(np.max([np.abs(v).max() for v in
-                              [p[1] for p in panels]]))
-    lemo_err_vmax = float(np.max([np.abs(p[2] - p[1]).max() for p in panels]))
-    diffs = []
-    for p in panels:
-        if p[3] is not None:
-            diffs.append(np.abs(p[2] - p[1]) - np.abs(p[3] - p[1]))
-    diff_vmax = float(np.max([np.abs(d).max() for d in diffs])) if diffs else 1e-9
-
+    # PER-CELL vmax (each panel self-normalizes to its own data range) so
+    # small-error families don't get washed out by shared-row scaling.
     fig2, axes2 = plt.subplots(3, n, figsize=(3.5 * n, 10.5),
-                                  gridspec_kw={"wspace": 0.04, "hspace": 0.07,
-                                               "right": 0.92})
+                                  gridspec_kw={"wspace": 0.04, "hspace": 0.07})
     if n == 1:
         axes2 = axes2.reshape(3, 1)
     row_labels2 = ["Ground Truth", "LEMO Error", "Error Difference"]
@@ -223,27 +205,23 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
                                  va="center", labelpad=20)
 
-    im_gt = im_le = im_dd = None
     for j, (fam, y_gt, y_lemo, y_fno) in enumerate(panels):
         axes2[0, j].set_title(FAM_LABELS[fam], fontsize=14)
-        # Row 1: ground truth field — linear, no headroom (full contrast)
-        im = _draw_heatmap(axes2[0, j], y_gt, gt_vmax,
-                            headroom=1.0, return_im=True)
-        if j == n - 1: im_gt = im
-        _overlay_gt_contours(axes2[0, j], y_gt, gt_vmax)
-        # Row 2: signed LEMO error — sqrt power-norm (moderate amplification)
+        # Row 1: ground truth field — per-cell vmax
+        gt_v = float(np.abs(y_gt).max())
+        _draw_heatmap(axes2[0, j], y_gt, gt_v)
+        _overlay_gt_contours(axes2[0, j], y_gt, gt_v)
+        # Row 2: signed LEMO error — per-cell vmax, linear, RdBu_r
         lemo_err_signed = y_lemo - y_gt
-        im = _draw_heatmap(axes2[1, j], lemo_err_signed, lemo_err_vmax,
-                            scale="sqrt", return_im=True)
-        if j == n - 1: im_le = im
-        _overlay_gt_contours(axes2[1, j], y_gt, lemo_err_vmax)
-        # Row 3: |LEMO err| − |FNO err| — sqrt power-norm
+        le_v = float(max(np.abs(lemo_err_signed).max(), 1e-9))
+        _draw_heatmap(axes2[1, j], lemo_err_signed, le_v)
+        _overlay_gt_contours(axes2[1, j], y_gt, le_v)
+        # Row 3: |LEMO err| − |FNO err| — per-cell vmax, linear
         if y_fno is not None:
             diff = np.abs(y_lemo - y_gt) - np.abs(y_fno - y_gt)
-            im = _draw_heatmap(axes2[2, j], diff, diff_vmax,
-                                scale="sqrt", return_im=True)
-            if j == n - 1: im_dd = im
-            _overlay_gt_contours(axes2[2, j], y_gt, diff_vmax)
+            dd_v = float(max(np.abs(diff).max(), 1e-9))
+            _draw_heatmap(axes2[2, j], diff, dd_v)
+            _overlay_gt_contours(axes2[2, j], y_gt, dd_v)
         else:
             axes2[2, j].set_xticks([]); axes2[2, j].set_yticks([])
             for sp in axes2[2, j].spines.values():
@@ -251,18 +229,9 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
             axes2[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
                                transform=axes2[2, j].transAxes,
                                color="dimgrey", fontsize=12)
-    # Shared colorbars per row, anchored to the rightmost panel
-    for ax_row, im_row, lbl in [(axes2[0, -1], im_gt, "field"),
-                                  (axes2[1, -1], im_le, "pred − GT"),
-                                  (axes2[2, -1], im_dd, "|LEMO err| − |FNO err|")]:
-        if im_row is None: continue
-        cb = fig2.colorbar(im_row, ax=ax_row, fraction=0.05, pad=0.04,
-                            shrink=0.95, aspect=18)
-        cb.ax.tick_params(labelsize=8)
-        cb.set_label(lbl, fontsize=9)
 
     fig2.suptitle("Predictions", fontsize=18, y=0.99)
-    fig2.tight_layout(rect=[0, 0, 0.92, 0.96])
+    fig2.tight_layout(rect=[0, 0, 1, 0.96])
     out2 = FIG / "V01_family_triptych_diff.pdf"
     fig2.savefig(out2, bbox_inches="tight")
     fig2.savefig(out2.with_suffix(".png"), dpi=300, bbox_inches="tight")
@@ -378,7 +347,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 err_f = np.abs(y_f - y_gt)
                 diff = err_l - err_f
                 diff_vmax = float(max(np.max(np.abs(diff)), 1e-9))
-                _draw_heatmap(axA[1, j], diff, diff_vmax, scale="sqrt")
+                _draw_heatmap(axA[1, j], diff, diff_vmax)
                 _overlay_gt_contours(axA[1, j], y_gt, diff_vmax)
             figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}",
                           fontsize=18, y=0.99)
@@ -418,7 +387,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
             for j, (t, lbl, diff) in enumerate(zip(t_abs, t_lbls, diffs)):
                 if i == 0:
                     axB[i, j].set_title(f"t={lbl}", fontsize=12)
-                _draw_heatmap(axB[i, j], diff, diff_vmax, scale="sqrt")
+                _draw_heatmap(axB[i, j], diff, diff_vmax)
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0],
                                        diff_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
