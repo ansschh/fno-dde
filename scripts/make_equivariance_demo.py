@@ -91,26 +91,32 @@ def main():
     vmax = max(max(np.abs(a).max() for a in left_panels),
                max(np.abs(a).max() for a in right_panels))
     # 3-row layout: row 0 = cyclic shift indicator (visual ρ_k), rows 1-2 = panels.
-    fig, axes = plt.subplots(3, len(SHIFTS), figsize=(2.2 * len(SHIFTS), 5.0),
+    fig, axes = plt.subplots(3, len(SHIFTS), figsize=(2.2 * len(SHIFTS), 5.2),
                               gridspec_kw={"wspace": 0.05, "hspace": 0.18,
-                                           "height_ratios": [0.18, 1, 1]})
+                                           "height_ratios": [0.30, 1, 1]})
     if len(SHIFTS) == 1:
         axes = axes.reshape(3, 1)
 
     # Lag-axis length used for the visual shift indicator.
     L_lag = x.shape[1]
-    base_strip = np.arange(L_lag)
     for j, (k, top, bot, err) in enumerate(zip(SHIFTS, left_panels, right_panels, errs)):
-        # Row 0: cyclic-shift indicator. Single-row "ruler" strip showing
-        # how the origin (position 0) wraps to position k after ρ_k. Position
-        # 0 is dark, the rest fades; after the shift, dark cell is at k.
-        shifted = np.roll(np.arange(L_lag), int(k))
-        marker = (shifted == 0).astype(float).reshape(1, -1)   # 1 where origin lands
-        axes[0, j].imshow(marker, cmap="Greys", aspect="auto",
-                            interpolation="nearest", vmin=0, vmax=1)
+        # Row 0: cyclic-shift indicator. Two stacked strips:
+        #   top sub-strip: original lag axis [0, 1, ..., L-1] as a smooth
+        #                   gradient (reference)
+        #   bottom sub-strip: ρ_k of the same axis -> shifted gradient with
+        #                     a visible wrap-around discontinuity
+        # The discontinuity in the bottom strip is exactly what makes the
+        # shift "cyclic": the right end of the original wraps to the left.
+        ref_strip = np.arange(L_lag).reshape(1, -1)
+        shifted_strip = np.roll(np.arange(L_lag), int(k)).reshape(1, -1)
+        combined = np.concatenate([ref_strip, shifted_strip], axis=0)
+        axes[0, j].imshow(combined, cmap="cividis", aspect="auto",
+                            interpolation="nearest")
         axes[0, j].set_xticks([]); axes[0, j].set_yticks([])
-        # tiny x-axis tick at 0 and at shift position
-        axes[0, j].axvline(int(k), color="#d62728", lw=2.0)
+        # Mark the wrap-around boundary in the shifted strip with a red line
+        if int(k) > 0:
+            axes[0, j].axvline(int(k) - 0.5, color="#d62728", lw=1.5,
+                                ymin=0.0, ymax=0.5)
         axes[0, j].set_title(f"$k = {k}$", fontsize=11)
         for sp in axes[0, j].spines.values():
             sp.set_visible(True); sp.set_linewidth(0.5); sp.set_color("grey")
@@ -124,8 +130,8 @@ def main():
                           va="top", ha="left", color="black",
                           bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
                                       alpha=0.92, edgecolor="none"))
-    axes[0, 0].set_ylabel(r"$\rho_k$ shift", rotation=0, ha="right",
-                            va="center", fontsize=10, labelpad=12)
+    axes[0, 0].set_ylabel("lag axis\n(orig / $\\rho_k$)", rotation=0,
+                            ha="right", va="center", fontsize=10, labelpad=12)
     axes[1, 0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x)$",
                             rotation=0, ha="right", va="center", fontsize=11)
     axes[2, 0].set_ylabel(r"$\rho_k\,\mathrm{LEMO}(x)$",
