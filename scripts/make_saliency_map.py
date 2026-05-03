@@ -98,9 +98,9 @@ def saliency_for_family(fam: str, device: str):
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(2.7 * len(FAMS), 3.0),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(2.8 * len(FAMS), 3.2),
                               sharey=True,
-                              gridspec_kw={"wspace": 0.18})
+                              gridspec_kw={"wspace": 0.10})
     if len(FAMS) == 1:
         axes = [axes]
     n_done = 0
@@ -116,22 +116,30 @@ def main():
         t_lag = np.arange(n_total)[::-1]
         ax.plot(t_lag, sal_norm, color="#d62728", lw=1.6, label="saliency")
         ax.plot(t_lag, gt, color="black", lw=1.0, linestyle="--", label="GT kernel")
-        ax.set_xlabel("lag $t_{out} - t_{in}$")
-        ax.set_title(FAM_LABELS[fam], fontsize=10)
-        ax.grid(linestyle="--", alpha=0.4)
+        # Pearson correlation as a quantitative metric per family.
+        a = sal_norm - sal_norm.mean()
+        b = gt - gt.mean()
+        denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-12
+        rho = float((a * b).sum() / denom)
+        ax.set_xlabel(r"lag $t_{out} - t_{in}$", fontsize=10)
+        ax.set_title(f"{FAM_LABELS[fam]}  (ρ={rho:.2f})", fontsize=11)
+        ax.grid(linestyle=":", alpha=0.4)
         ax.set_xlim(0, n_total - 1)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
         n_done += 1
     if n_done == 0:
         plt.close(fig); return
     axes[0].set_ylabel("normalized")
-    axes[-1].legend(bbox_to_anchor=(1.02, 1.0), loc="upper left",
-                     fontsize=8, frameon=False)
-    fig.suptitle((r"Receptive-field saliency $|\partial \hat{u}(T) / \partial u(t_{in})|$ "
-                  r"vs analytic GT kernel"),
-                 fontsize=11)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center",
+                bbox_to_anchor=(0.5, -0.04),
+                ncol=2, frameon=False, fontsize=10)
+    fig.suptitle("Receptive-field saliency vs GT kernel",
+                  fontsize=14, y=1.0)
+    fig.tight_layout(rect=[0, 0.04, 1, 0.96])
     out = FIG / "M8_saliency_map.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"  -> {out}")
 
