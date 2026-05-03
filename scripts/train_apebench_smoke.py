@@ -171,7 +171,19 @@ def main() -> None:
     model = model.to(device)
     print(f"model: {args.model}, params: {n_params:,}")
 
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-3)
+    # Separate FiLM params into a no-weight-decay group so the per-sample
+    # modulation isn't driven to zero by L2 regularization. WD on FiLM (=1e-3)
+    # was the dominant cause of FiLM nullification in the original sweep.
+    film_params, other_params = [], []
+    for n, p in model.named_parameters():
+        if "film_net" in n:
+            film_params.append(p)
+        else:
+            other_params.append(p)
+    opt = torch.optim.Adam([
+        {"params": other_params, "weight_decay": 1e-3},
+        {"params": film_params,  "weight_decay": 0.0},
+    ], lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs, eta_min=args.lr * 1e-3)
 
     out_dir = Path(args.output_dir) / args.family / args.regime / args.model / f"s{args.seed}"
@@ -180,6 +192,12 @@ def main() -> None:
         "train_loss": [], "val_rel_l2": [], "test_rel_l2": [],
         "grad_norm": [], "weight_norm": [], "op_norm_max": [],
         "lr": [], "wall_per_epoch_s": [], "peak_mem_gb": [],
+        # FiLM diagnostic: per-epoch (gamma, beta) statistics across all
+        # film_net layers. Detects FiLM nullification (γ→0, β→0).
+        "film_gamma_mean_pre_tanh": [],
+        "film_gamma_std_pre_tanh": [],
+        "film_beta_std_pre_tanh": [],
+        "film_input_norm": [],  # ||film_net.0.weight||_F to detect dead first layer
     }
     best_val = float("inf")
     t0 = time.time()
@@ -220,6 +238,35 @@ def main() -> None:
         history["wall_per_epoch_s"].append(time.time() - epoch_t0)
         history["peak_mem_gb"].append(
             float(torch.cuda.max_memory_allocated() / 1e9) if device.type == "cuda" else 0.0)
+        # FiLM diagnostic: estimate γ/β stats by passing test-set params through film_net
+        try:
+            with torch.no_grad():
+                sample_batch = next(iter(val_loader))
+                fp = sample_batch["params"].to(device).float()
+                gammas, betas, in_norms = [], [], []
+                for blk in getattr(model, "blocks", []):
+                    if hasattr(blk, "A_lag") and hasattr(blk.A_lag, "film_net"):
+                        film = blk.A_lag.film_net(fp)
+                        OC = blk.A_lag.out_channels; M = blk.A_lag.lag_modes
+                        gammas.append(film[:, :OC * M])
+                        betas.append(film[:, OC * M:])
+                        in_norms.append(blk.A_lag.film_net[0].weight.norm().item())
+                if gammas:
+                    g_all = torch.cat(gammas, dim=1)
+                    b_all = torch.cat(betas, dim=1)
+                    history["film_gamma_mean_pre_tanh"].append(float(g_all.mean()))
+                    history["film_gamma_std_pre_tanh"].append(float(g_all.std()))
+                    history["film_beta_std_pre_tanh"].append(float(b_all.std()))
+                    history["film_input_norm"].append(float(np.mean(in_norms)))
+                else:
+                    history["film_gamma_mean_pre_tanh"].append(0.0)
+                    history["film_gamma_std_pre_tanh"].append(0.0)
+                    history["film_beta_std_pre_tanh"].append(0.0)
+                    history["film_input_norm"].append(0.0)
+        except Exception as _e:
+            for k in ("film_gamma_mean_pre_tanh", "film_gamma_std_pre_tanh",
+                      "film_beta_std_pre_tanh", "film_input_norm"):
+                history[k].append(0.0)
         elapsed = time.time() - t0
         print(f"[ep {epoch+1:>3d}/{args.epochs}]  train_loss={avg_loss:.4e}  "
               f"val_relL2={val_rl2:.4f}  grad={history['grad_norm'][-1]:.2e}  "

@@ -78,9 +78,17 @@ class FiLMLagSpectralND(nn.Module):
             nn.Linear(film_hidden, 2 * out_channels * lag_modes),
         )
         with torch.no_grad():
-            self.film_net[-1].weight.mul_(0.01)
+            # Symmetry-breaking init: per-output (γ, β) start at distinct values
+            # so each (out_channel, lag_mode) follows a different gradient path.
+            # Last-layer weight kept small (0.02 std) to avoid initial saturation,
+            # but NOT zero — this gave each family the same gradient under WD.
+            self.film_net[-1].weight.normal_(0.0, 0.02)
             b = torch.zeros(2 * out_channels * lag_modes)
-            b[:out_channels * lag_modes] = 1.0
+            n_g = out_channels * lag_modes
+            # γ: N(1, 0.1) so the model starts ≈ FNO but each γ_{o,m} drifts independently
+            b[:n_g] = 1.0 + 0.10 * torch.randn(n_g)
+            # β: N(0, 0.01) so the additive bias has small per-mode variation
+            b[n_g:] = 0.01 * torch.randn(n_g)
             self.film_net[-1].bias.copy_(b)
 
     def forward(self, x: torch.Tensor, params: torch.Tensor) -> torch.Tensor:
@@ -169,13 +177,12 @@ class FiLMLagSpectralND(nn.Module):
         OC, M = self.out_channels, self.lag_modes
         gamma = film[:, :OC * M].view(B, OC, M)              # (B, out, modes)
         beta = film[:, OC * M:].view(B, OC, M)               # (B, out, modes)
-        if self.sigma is not None:
-            # When σ-constrained, bound BOTH multiplicative and additive FiLM:
-            #   |gamma| ≤ 1 (so per-mode operator norm of A_lag · gamma ≤ σ)
-            #   |beta|  ≤ 1 (so additive bias is bounded → rollout stable)
-            # Without these, FiLM destroys the σ-bound regardless of K's norm.
-            gamma = torch.tanh(gamma)
-            beta = torch.tanh(beta)
+        # ALWAYS apply tanh to γ, β — paper-consistent bound (|γ|≤1, |β|≤1).
+        # Previously this was σ-conditional, which left γ unbounded for σ=None
+        # runs and weight decay drove γ → 0 (FiLM nullification). Bounding the
+        # FiLM output keeps gradient flow alive even when σ is not enforced.
+        gamma = torch.tanh(gamma)
+        beta = torch.tanh(beta)
         eff = min(eff_modes, M)
         # Broadcast gamma, beta across spatial axes.  Build the broadcasting
         # shape: (B, out, *[1]*n_spatial, modes).
