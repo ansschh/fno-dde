@@ -90,30 +90,48 @@ def main():
     # Shared symmetric colour limits across both rows.
     vmax = max(max(np.abs(a).max() for a in left_panels),
                max(np.abs(a).max() for a in right_panels))
-    fig, axes = plt.subplots(2, len(SHIFTS), figsize=(2.0 * len(SHIFTS), 4.4),
-                              gridspec_kw={"wspace": 0.05, "hspace": 0.10})
+    # 3-row layout: row 0 = cyclic shift indicator (visual ρ_k), rows 1-2 = panels.
+    fig, axes = plt.subplots(3, len(SHIFTS), figsize=(2.2 * len(SHIFTS), 5.0),
+                              gridspec_kw={"wspace": 0.05, "hspace": 0.18,
+                                           "height_ratios": [0.18, 1, 1]})
     if len(SHIFTS) == 1:
-        axes = axes.reshape(2, 1)
+        axes = axes.reshape(3, 1)
+
+    # Lag-axis length used for the visual shift indicator.
+    L_lag = x.shape[1]
+    base_strip = np.arange(L_lag)
     for j, (k, top, bot, err) in enumerate(zip(SHIFTS, left_panels, right_panels, errs)):
-        for ax in axes[:, j]:
+        # Row 0: cyclic-shift indicator. Single-row "ruler" strip showing
+        # how the origin (position 0) wraps to position k after ρ_k. Position
+        # 0 is dark, the rest fades; after the shift, dark cell is at k.
+        shifted = np.roll(np.arange(L_lag), int(k))
+        marker = (shifted == 0).astype(float).reshape(1, -1)   # 1 where origin lands
+        axes[0, j].imshow(marker, cmap="Greys", aspect="auto",
+                            interpolation="nearest", vmin=0, vmax=1)
+        axes[0, j].set_xticks([]); axes[0, j].set_yticks([])
+        # tiny x-axis tick at 0 and at shift position
+        axes[0, j].axvline(int(k), color="#d62728", lw=2.0)
+        axes[0, j].set_title(f"$k = {k}$", fontsize=11)
+        for sp in axes[0, j].spines.values():
+            sp.set_visible(True); sp.set_linewidth(0.5); sp.set_color("grey")
+
+        for ax in axes[1:, j]:
             ax.set_xticks([]); ax.set_yticks([])
-        axes[0, j].imshow(top, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[1, j].imshow(bot, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        axes[0, j].set_title(f"$k = {k}$", fontsize=10)
-        col = "green" if err < 1e-2 else "red"
-        axes[0, j].text(0.02, 0.98, f"$e_k = {err:.1e}$",
-                          transform=axes[0, j].transAxes, fontsize=8,
-                          va="top", ha="left", color=col,
+        axes[1, j].imshow(top, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+        axes[2, j].imshow(bot, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+        axes[1, j].text(0.02, 0.98, f"$e_k = {err:.1e}$",
+                          transform=axes[1, j].transAxes, fontsize=9,
+                          va="top", ha="left", color="black",
                           bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
-                                      alpha=0.9, edgecolor="none"))
-    axes[0, 0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x)$",
+                                      alpha=0.92, edgecolor="none"))
+    axes[0, 0].set_ylabel(r"$\rho_k$ shift", rotation=0, ha="right",
+                            va="center", fontsize=10, labelpad=12)
+    axes[1, 0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x)$",
                             rotation=0, ha="right", va="center", fontsize=11)
-    axes[1, 0].set_ylabel(r"$\rho_k\,\mathrm{LEMO}(x)$",
+    axes[2, 0].set_ylabel(r"$\rho_k\,\mathrm{LEMO}(x)$",
                             rotation=0, ha="right", va="center", fontsize=11)
-    fig.suptitle(("Cyclic-shift equivariance: rows are visually identical iff "
-                  + r"$\mathrm{LEMO}\circ\rho_k = \rho_k\circ\mathrm{LEMO}$ "
-                  + "(float32 FFT floor $\\sim 5\\!\\times\\!10^{-3}$)"),
-                 fontsize=11, y=1.02)
+    fig.suptitle("Cyclic-shift equivariance",
+                 fontsize=14, y=1.0)
     out = FIG / "M4_equivariance_demo.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
