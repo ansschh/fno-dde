@@ -1009,7 +1009,23 @@ def generate_split_generic(family: str, num_samples: int, seed: int,
             p = DistKernelRDParams(**{**p.__dict__, "T_total": T_total_needed,
                                         "dt": dt, "n_grid": n_grid, "L": L})
             traj = simulate_dist_kernel_rd(p, rng, grid)
-            params_vec = [p.A, p.tau, p.D]
+            # Pad params_vec to dim=5: [A, tau, D, e1, e2] with kernel-shape
+            # extras so FiLM has enough signal to learn family-specific kernel
+            # modulation. Padding scheme:
+            #   exp / uniform : (e1, e2) = (0, 0)
+            #   gaussian      : (e1, e2) = (mu, sigma)
+            #   gamma         : (e1, e2) = (k, 0)
+            #   powerlaw      : (e1, e2) = (alpha, 0)   (s0 is fixed at 0.05)
+            ke = p.kernel_extra or {}
+            if kernel_type == "gaussian":
+                e1, e2 = float(ke.get("mu", 0.0)), float(ke.get("sigma", 0.0))
+            elif kernel_type == "gamma":
+                e1, e2 = float(ke.get("k", 0.0)), 0.0
+            elif kernel_type == "powerlaw":
+                e1, e2 = float(ke.get("alpha", 0.0)), 0.0
+            else:  # exp, uniform
+                e1, e2 = 0.0, 0.0
+            params_vec = [p.A, p.tau, p.D, e1, e2]
         else:
             raise ValueError(f"family {family} not implemented in generate_split_generic")
         traj = traj[:n_total]
