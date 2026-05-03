@@ -88,15 +88,15 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         dl = load_viz(fam)
         if dl is None:
             continue
-        df = load_viz_fno(fam)
-        if df is None:
-            continue  # skip families where we lack a baseline (no N/A cells)
+        df = load_viz_fno(fam)  # may be None if FNO+FiLM viz unavailable
         y = dl["target"][sample_idx]
         yhat_l = dl["pred"][sample_idx]
-        yhat_f = df["pred"][sample_idx]
         y_l = y[target_step, ..., 0]
         yhL = yhat_l[target_step, ..., 0]
-        yhF = yhat_f[target_step, ..., 0]
+        if df is not None:
+            yhF = df["pred"][sample_idx][target_step, ..., 0]
+        else:
+            yhF = None  # plot panel with GT+LEMO only, omit FNO contour
         panels.append((fam, y_l, yhL, yhF))
     if not panels:
         return None
@@ -108,24 +108,21 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         axes = [axes]
 
     for ax, (fam, y_l, yhL, yhF) in zip(axes, panels):
-        vmax = float(np.max([np.abs(v).max() for v in (y_l, yhL, yhF)]))
+        all_arrs = [y_l, yhL] + ([yhF] if yhF is not None else [])
+        vmax = float(np.max([np.abs(v).max() for v in all_arrs]))
         H, W = y_l.shape
-        # Contour levels: 7 spanning the meaningful range, asymmetric around 0
-        # so we avoid the degenerate zero crossing.
         pos_levels = np.linspace(0.15 * vmax, 0.85 * vmax, 4)
         levels = np.concatenate([-pos_levels[::-1], pos_levels])
-        # Background: faded greyscale so colored contours pop more.
         ax.imshow(y_l, cmap="Greys", vmin=-vmax, vmax=vmax,
                   interpolation="bilinear", alpha=0.45)
-        # Contours: GT (black solid, thicker), LEMO (red solid),
-        # FNO+FiLM (cyan dashed, longer dashes).
         ax.contour(np.arange(W), np.arange(H), y_l, levels=levels,
                     colors="black", linewidths=2.4, alpha=1.0)
         ax.contour(np.arange(W), np.arange(H), yhL, levels=levels,
                     colors="#d62728", linewidths=1.8, alpha=0.95)
-        ax.contour(np.arange(W), np.arange(H), yhF, levels=levels,
-                    colors="#0091c5", linewidths=1.8, alpha=0.95,
-                    linestyles="dashed")
+        if yhF is not None:
+            ax.contour(np.arange(W), np.arange(H), yhF, levels=levels,
+                        colors="#0091c5", linewidths=1.8, alpha=0.95,
+                        linestyles="dashed")
         ax.set_xticks([]); ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
