@@ -114,18 +114,14 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         return None
     n = len(panels)
 
-    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     def _draw_heatmap(ax, field, vmax, cmap=PASTEL_DIV, scale="linear",
                         headroom=1.0, return_im=False, add_cbar=False,
                         cbar_n_ticks=3):
         """Upsampled imshow of `field`. scale in {'linear', 'mild', 'sqrt', 'symlog'}.
-        - mild: signed power-norm with gamma=0.7 (gentler than sqrt)
-        - sqrt: signed sqrt-of-magnitude (gamma=0.5)
-        - symlog: SymLogNorm with linthresh=1e-3 * vmax
-        If add_cbar, places a compact horizontal colorbar at the bottom of the
-        panel showing the actual numeric range (per-cell scale).
-        """
+        If add_cbar, attaches a sibling colorbar axes via make_axes_locatable
+        (renders identically in PNG and PDF — no inset clipping issues)."""
         f_hi = zoom(field, UPSAMPLE, order=3)
         H, W = field.shape
         v = vmax * headroom
@@ -141,12 +137,10 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                              vmin=-v, vmax=v, base=10),
                             interpolation="bilinear", extent=extent)
         elif scale == "sqrt":
-            im = ax.imshow(f_hi, cmap=cmap,
-                            norm=_signed_power(0.5),
+            im = ax.imshow(f_hi, cmap=cmap, norm=_signed_power(0.5),
                             interpolation="bilinear", extent=extent)
         elif scale == "mild":
-            im = ax.imshow(f_hi, cmap=cmap,
-                            norm=_signed_power(0.7),
+            im = ax.imshow(f_hi, cmap=cmap, norm=_signed_power(0.7),
                             interpolation="bilinear", extent=extent)
         else:
             im = ax.imshow(f_hi, cmap=cmap, vmin=-v, vmax=v,
@@ -155,16 +149,12 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
         if add_cbar:
-            cax = inset_axes(ax, width="80%", height="5%",
-                              loc="lower center",
-                              bbox_to_anchor=(0, -0.10, 1, 1),
-                              bbox_transform=ax.transAxes,
-                              borderpad=0)
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("bottom", size="5%", pad=0.05)
             cb = ax.figure.colorbar(im, cax=cax, orientation="horizontal")
             ticks = np.linspace(-v, v, cbar_n_ticks)
             cb.set_ticks(ticks)
             cb.ax.tick_params(labelsize=6, length=2, pad=1)
-            # Format ticks with 2 sig figs
             cb.ax.set_xticklabels([f"{t:.2g}" for t in ticks])
         if return_im:
             return im
@@ -319,7 +309,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     if not fam_data:
         return None
 
-    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     def _draw_heatmap(ax, field, vmax, cmap=PASTEL_DIV, scale="linear",
                        headroom=1.0, return_im=False, add_cbar=False,
@@ -351,11 +341,8 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
         if add_cbar:
-            cax = inset_axes(ax, width="80%", height="5%",
-                              loc="lower center",
-                              bbox_to_anchor=(0, -0.10, 1, 1),
-                              bbox_transform=ax.transAxes,
-                              borderpad=0)
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("bottom", size="5%", pad=0.05)
             cb = ax.figure.colorbar(im, cax=cax, orientation="horizontal")
             ticks = np.linspace(-v, v, cbar_n_ticks)
             cb.set_ticks(ticks)
