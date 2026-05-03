@@ -42,9 +42,15 @@ for fam in dist_exp_rd_2d dist_gaussian_rd_2d dist_gamma_rd_2d dist_uniform_rd_2
 done
 if [ $need_gen -eq 1 ]; then
   echo "[bootstrap] generating dist_*_rd_2d data (parallel by family)..."
+  # Use the SAME args as slurm/gen_data.sbatch (validated on Caltech).
+  # Default dt=0.05 violates the stability check (sf=5.12 > 2.78); we MUST
+  # pass --dt 0.01 and --T_total 1.28 (not the argparse default 16.0).
   for fam in dist_exp_rd_2d dist_gaussian_rd_2d dist_gamma_rd_2d dist_uniform_rd_2d dist_powerlaw_rd_2d; do
     (
-      python3 scripts/gen_dde_pde_data.py --family $fam --n_train 1000 --n_val 200 --n_test 200 --params_dim 5 \
+      python3 scripts/gen_dde_pde_data.py --family $fam \
+        --num_train 1000 --num_val 200 --num_test 200 --num_points 64 \
+        --T_total 1.28 --dt 0.01 --n_hist 64 --n_out 64 \
+        --out_dir data_dde_pde \
         > data_gen_${fam}.log 2>&1 || echo "[gen] $fam FAILED"
     ) &
   done
