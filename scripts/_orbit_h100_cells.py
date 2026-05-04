@@ -54,7 +54,8 @@ def cells_lemo():
                 "sweep": "orbit_lemo_pc",
                 "fam": "dist_exp_rd_2d_orbit", "reg": "clean", "seed": seed,
                 "model": "lemo_pc_nd", "m": m,
-                "args": _orbit_args("lemo_pc_nd", m, seed),
+                "args": _orbit_args("lemo_pc_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     return cells
 
@@ -68,7 +69,8 @@ def cells_per_lag_mlp():
                 "sweep": "orbit_per_lag_mlp",
                 "fam": "dist_exp_rd_2d_orbit", "reg": "clean", "seed": seed,
                 "model": "per_lag_mlp_nd", "m": m,
-                "args": _orbit_args("per_lag_mlp_nd", m, seed),
+                "args": _orbit_args("per_lag_mlp_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     return cells
 
@@ -84,13 +86,15 @@ def all_cells():
             cells.append({
                 "sweep": "orbit_lemo_pc", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "lemo_pc_nd", "m": m,
-                "args": _orbit_args("lemo_pc_nd", m, seed),
+                "args": _orbit_args("lemo_pc_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
         for seed in SEEDS:
             cells.append({
                 "sweep": "orbit_per_lag_mlp", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "per_lag_mlp_nd", "m": m,
-                "args": _orbit_args("per_lag_mlp_nd", m, seed),
+                "args": _orbit_args("per_lag_mlp_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     # m16 next
     for m in (16,):
@@ -98,13 +102,15 @@ def all_cells():
             cells.append({
                 "sweep": "orbit_lemo_pc", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "lemo_pc_nd", "m": m,
-                "args": _orbit_args("lemo_pc_nd", m, seed),
+                "args": _orbit_args("lemo_pc_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
         for seed in SEEDS:
             cells.append({
                 "sweep": "orbit_per_lag_mlp", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "per_lag_mlp_nd", "m": m,
-                "args": _orbit_args("per_lag_mlp_nd", m, seed),
+                "args": _orbit_args("per_lag_mlp_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     # m8 next
     for m in (8,):
@@ -112,13 +118,15 @@ def all_cells():
             cells.append({
                 "sweep": "orbit_lemo_pc", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "lemo_pc_nd", "m": m,
-                "args": _orbit_args("lemo_pc_nd", m, seed),
+                "args": _orbit_args("lemo_pc_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
         for seed in SEEDS:
             cells.append({
                 "sweep": "orbit_per_lag_mlp", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "per_lag_mlp_nd", "m": m,
-                "args": _orbit_args("per_lag_mlp_nd", m, seed),
+                "args": _orbit_args("per_lag_mlp_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     # m4, m2, m1 (per_lag_mlp only, fast)
     for m in (4, 2, 1):
@@ -126,7 +134,8 @@ def all_cells():
             cells.append({
                 "sweep": "orbit_per_lag_mlp", "fam": "dist_exp_rd_2d_orbit",
                 "reg": "clean", "seed": seed, "model": "per_lag_mlp_nd", "m": m,
-                "args": _orbit_args("per_lag_mlp_nd", m, seed),
+                "args": _orbit_args("per_lag_mlp_nd", m, seed,
+                                     epochs=50 if m == 32 else 100),
             })
     return cells
 
