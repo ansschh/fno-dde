@@ -1,4 +1,7 @@
-"""M3 — Failure-mode gallery.
+"""M3 — Failure-mode gallery. **DROPPED 2026-05-03** — redundant with
+V01_family_triptych (appendix) which already shows GT vs LEMO-PC fields per
+family. M3 only added an easiest/hardest-sample axis on top, which doesn't
+add narrative beyond V01. Script kept on disk; not invoked by any pipeline.
 
 For each of the 5 dist-kernel families, find the easiest and hardest test
 sample (by per-sample relL2 from `residuals.npz`), then render side-by-side:

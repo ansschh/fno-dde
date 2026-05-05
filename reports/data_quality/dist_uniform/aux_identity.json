@@ -1,0 +1,16 @@
+{
+  "check": "dist_uniform_auxiliary_identity",
+  "equation": "m'(t) = (x(t) - x(t-\u03c4))/\u03c4",
+  "n_samples": 100,
+  "residual_median": {
+    "mean": 0.0010341620448511058,
+    "std": 0.0017123146939837688,
+    "max": 0.007941228316156401
+  },
+  "residual_p95": {
+    "mean": 0.0060592773055311855,
+    "std": 0.00693119343737228,
+    "max": 0.03327546081573107
+  },
+  "pass": true
+}

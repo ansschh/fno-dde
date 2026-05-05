@@ -1,0 +1,16 @@
+{
+  "family": "hutch",
+  "total_samples": 54000,
+  "nan_count": 0,
+  "inf_count": 0,
+  "shape_errors": 0,
+  "continuity_violations": 0,
+  "positivity_violations": 89093,
+  "continuity_stats": {
+    "mean": 2.1852375875897467e-17,
+    "median": 0.0,
+    "p95": 1.1102230246251565e-16,
+    "max": 2.220446049250313e-16
+  },
+  "pass": false
+}

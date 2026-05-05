@@ -1,0 +1,11 @@
+{
+  "split_name": "ood_delay",
+  "n_samples": 2000,
+  "relL2_orig_median": 1.0175824165344238,
+  "relL2_orig_p95": 2.2356808185577393,
+  "relL2_orig_mean": 1.1943455934524536,
+  "relL2_orig_std": 0.6609974503517151,
+  "relL2_orig_p5": 0.7386811971664429,
+  "relL2_orig_min": 0.3483949899673462,
+  "relL2_orig_max": 10.993804931640625
+}

@@ -1,0 +1,20 @@
+{
+  "family": "dist_delay_rd_2d",
+  "spatial_dims": 2,
+  "num_channels": 1,
+  "spatial_shape": [
+    64,
+    64
+  ],
+  "n_hist": 64,
+  "n_out": 64,
+  "n_samples": {
+    "train": 4,
+    "val": 1,
+    "test": 1
+  },
+  "params_dim": 3,
+  "source": "scripts/gen_dde_pde_data.py",
+  "delay_relevance": "explicit u(x, t-tau) term in dynamics",
+  "dt": 0.01
+}

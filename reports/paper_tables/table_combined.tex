@@ -1,0 +1,17 @@
+% Combined performance table for paper
+\begin{table}[h]
+\centering
+\caption{Baseline FNO Performance on DDE Benchmark}
+\label{tab:baseline_performance}
+\begin{tabular}{lcccccc}
+\toprule
+Family & State & Delay & ID Med & ID P95 & OOD-delay & OOD-history \\
+\midrule
+Hutchinson & 1 & disc & 0.121 & 0.552 & 7.0× & 2.4× \\
+Linear2 & 1 & disc & 0.612 & 1.532 & 1.5× & 1.6× \\
+Van der Pol & 2 & disc & 0.296 & 0.897 & 2.6× & 4.0× \\
+DistUniform & 2 & dist & 0.089 & 0.406 & 5.1× & 11.3× \\
+DistExp & 2 & dist & 0.077 & 0.683 & 4.2× & 3.9× \\
+\bottomrule
+\end{tabular}
+\end{table}

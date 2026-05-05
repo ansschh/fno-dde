@@ -1,0 +1,12 @@
+{
+  "check": "vdp_history_consistency",
+  "constraint": "v(t) = dx/dt",
+  "id_samples": 200,
+  "id_rms_delta": {
+    "mean": 0.013217501656967294,
+    "std": 0.007509715643225434,
+    "median": 0.010873979948187142,
+    "p95": 0.02739215580791196
+  },
+  "pass": true
+}

@@ -1,0 +1,11 @@
+{
+  "split_name": "ood_history",
+  "n_samples": 2000,
+  "relL2_orig_median": 0.8212751746177673,
+  "relL2_orig_p95": 1.9223344326019287,
+  "relL2_orig_mean": 1.0166503190994263,
+  "relL2_orig_std": 1.3589954376220703,
+  "relL2_orig_p5": 0.4060341417789459,
+  "relL2_orig_min": 0.13598939776420593,
+  "relL2_orig_max": 41.50315475463867
+}

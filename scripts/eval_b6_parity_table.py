@@ -67,12 +67,17 @@ def crawl_results(roots):
             yield {
                 "sweep": root.name,
                 "family": fam, "regime": reg, "model": mdl, "seed": seed,
-                "test_rel_l2": data.get("test_rel_l2"),
-                "val_rel_l2": data.get("val_rel_l2"),
+                "test_rel_l2": (data.get("test_rel_l2_mean")
+                                or data.get("test_rel_l2")),
+                "val_rel_l2": (data.get("best_val_rel_l2")
+                               or data.get("val_rel_l2")),
                 "n_params": data.get("n_params") or data.get("params"),
                 "ckpt_size_mb": ckpt_size / 1e6,
-                "wall_clock_s": wall_time,
-                "config_sigma": (data.get("config", {}).get("model", {}) or {}).get("sigma"),
+                "wall_clock_s": (wall_time
+                                 or data.get("wall_seconds")
+                                 or data.get("wall_clock_s")),
+                "config_sigma": (data.get("sigma")
+                                 or (data.get("config", {}).get("model", {}) or {}).get("sigma")),
             }
 
 

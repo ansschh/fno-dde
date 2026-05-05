@@ -80,6 +80,28 @@ def build_model(config: dict, in_channels: int, out_channels: int,
         from models.lemo_pc_nd import create_causal_smooth_lemo_pc_nd
         return create_causal_smooth_lemo_pc_nd(in_channels, out_channels, config, length=length)
 
+    if model_class == "lemo_sigma_lip_nd":
+        # CHANGE_1E: certified subclass with σ-projected SpatialFNO + spectral-norm
+        # on B/heads + ReLU. Required hyperparam: sigma. Optional: convex_residual_alpha.
+        from models.lemo_sigma_lip_nd import LEMOSigmaLipND
+        m_cfg = config.get("model", config)
+        return LEMOSigmaLipND(
+            in_channels=in_channels, out_channels=out_channels,
+            length=length,
+            params_dim=int(m_cfg.get("params_dim", 4)),
+            spatial_shape=tuple(m_cfg.get("spatial_shape", ())),
+            spatial_modes=m_cfg.get("spatial_modes"),
+            lag_modes=int(m_cfg.get("lag_modes", 24)),
+            width=int(m_cfg.get("width", 64)),
+            n_layers=int(m_cfg.get("n_layers", 3)),
+            film_hidden=int(m_cfg.get("film_hidden", 64)),
+            sigma=float(m_cfg.get("sigma", 0.5)),
+            convex_residual_alpha=m_cfg.get("convex_residual_alpha"),
+            extract_params=bool(m_cfg.get("extract_params", True)),
+            causal_smoother=bool(m_cfg.get("causal_smoother", False)),
+            smoother_k=int(m_cfg.get("smoother_k", 24)),
+        )
+
     if model_class == "per_lag_mlp_nd":
         from models.per_lag_mlp_nd import create_per_lag_mlp_nd
         return create_per_lag_mlp_nd(in_channels, out_channels, config, length=length)

@@ -1,0 +1,11 @@
+{
+  "model_dir": "outputs\\baseline_v1\\hutch_seed42_20251228_131919",
+  "family": "hutch",
+  "timestamp": "2025-12-28T15:57:07.817673",
+  "splits_evaluated": [
+    "id",
+    "ood_delay",
+    "ood_delay_hole",
+    "ood_history"
+  ]
+}

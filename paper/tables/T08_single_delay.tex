@@ -1,20 +1,14 @@
 \begin{table}[h]
 \centering
-\caption{Single-delay 2D test rel-$L_2$ across Mackey-Glass, Wright, Hutchinson families (mean over 3 seeds).  Best per row in bold.  UNet excluded (not delay-aware).}
+\caption{Single-delay 2D test rel-$L_2$ across Mackey-Glass, Wright, Hutchinson families. Each cell reports mean $\pm$ std aggregated across 3 regimes (clean, lowres, noisy) and 3 seeds (n=9). Best mean per row in bold.  UNet ties LEMO-PC on these benchmarks because the kernel collapses to a Dirac and delay-awareness is not required.}
 \label{tab:single-delay}
-\begin{tabular}{llccccc}
+\begin{tabular}{lcccccc}
 \toprule
-Family & Regime & LEMO-PC & LEMO & FNO & Markov-FNO & Window-FNO \\
+Family & LEMO-PC & LEMO & FNO & Markov-FNO & Window-FNO & UNet \\
 \midrule
-Mackey-Glass & clean & \textbf{0.011} & 0.238 & 0.078 & 0.734 & 0.333 \\
-Mackey-Glass & lowres & \textbf{0.051} & 0.273 & 0.082 & 0.744 & 0.569 \\
-Mackey-Glass & noisy & \textbf{0.012} & 0.239 & 0.079 & 0.729 & 0.360 \\
-Wright & clean & \textbf{0.025} & 0.611 & 0.102 & 0.963 & 1.857 \\
-Wright & lowres & \textbf{0.086} & 0.629 & 0.102 & 0.972 & 1.862 \\
-Wright & noisy & \textbf{0.024} & 0.611 & 0.102 & 0.963 & 1.982 \\
-Hutchinson & clean & \textbf{0.027} & 0.664 & 0.102 & 0.956 & 0.939 \\
-Hutchinson & lowres & \textbf{0.096} & 0.677 & 0.104 & 0.965 & 0.940 \\
-Hutchinson & noisy & \textbf{0.027} & 0.666 & 0.103 & 0.956 & 0.919 \\
+Mackey-Glass & 0.025 $\pm$ 0.019 & 0.250 $\pm$ 0.016 & 0.080 $\pm$ 0.006 & 0.736 $\pm$ 0.024 & 0.421 $\pm$ 0.227 & \textbf{0.013} $\pm$ \textbf{0.001} \\
+Wright & 0.045 $\pm$ 0.029 & 0.617 $\pm$ 0.008 & 0.102 $\pm$ 0.003 & 0.966 $\pm$ 0.008 & 1.900 $\pm$ 0.719 & \textbf{0.024} $\pm$ \textbf{0.002} \\
+Hutchinson & 0.050 $\pm$ 0.033 & 0.669 $\pm$ 0.006 & 0.103 $\pm$ 0.003 & 0.959 $\pm$ 0.008 & 0.933 $\pm$ 0.025 & \textbf{0.024} $\pm$ \textbf{0.002} \\
 \bottomrule
 \end{tabular}
 \end{table}

@@ -169,16 +169,28 @@ def capture_viz_samples(model, test_loader, device, n=4):
 
 
 def capture_kernel_snapshot(ckpt_path: Path):
-    """Extract learned LEMO weights + FiLM params from ckpt.  Returns {} for non-LEMO."""
+    """Extract learned spectral weights + FiLM params from a checkpoint.
+
+    Captures the spectral kernel for any architecture that stores its Fourier
+    weights as a parameter named `weights*` (LEMO-PC, FNO_nd, MarkovFNO,
+    WindowFNO via baselines_nd.SpectralND) or as separate real/imag
+    parameters `weight_real`/`weight_imag` (F-FNO via mfno_paper.SpectralConv1d).
+
+    Models without any Fourier-mode kernel — MemNO (S4-style state-space),
+    UNet, NIDE, NDDE, S4, per_lag_mlp_nd — yield an empty snapshot dict.
+    """
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     sd = ckpt["model_state_dict"]
     out = {}
+    PATTERNS = (
+        "weights_time", "weights",        # complex Parameter spectral kernels
+        "weight_real", "weight_imag",     # F-FNO separate real/imag Parameters
+        "film_net", "A_lag",               # FiLM modulation (LEMO-PC)
+        "A_spat.weights",                  # spatial spectral (LEMO-PC)
+    )
     for k, v in sd.items():
-        if any(s in k for s in ("weights_time", "weights",  # spectral lag kernel
-                                 "film_net", "A_lag",         # FiLM
-                                 "A_spat.weights")):           # spatial spectral
+        if any(s in k for s in PATTERNS):
             arr = v.detach().cpu().numpy()
-            # Complex tensors → store as 2-tuple
             if np.iscomplexobj(arr):
                 out[k + "__re"] = arr.real.astype(np.float32)
                 out[k + "__im"] = arr.imag.astype(np.float32)
@@ -422,12 +434,15 @@ def capture_equivariance(model, test_loader, device, shifts=(1, 4, 16), n_max_sa
 
 
 def process_cell(ckpt_path: Path, data_dir: str, family: str,
-                 device: str, n_viz: int):
+                 device: str, n_viz: int, minimal: bool = False):
     cell_dir = ckpt_path.parent
     # Idempotency: skip only if BOTH the legacy per-frame AND the new
     # rollout/fft/equivariance captures have already been written.
-    needed = ["per_frame.json", "long_rollout.npz",
-              "fft_residual.npz", "equivariance.json"]
+    if minimal:
+        needed = ["per_frame.json", "viz_samples.npz"]
+    else:
+        needed = ["per_frame.json", "long_rollout.npz",
+                  "fft_residual.npz", "equivariance.json"]
     if all((cell_dir / n).exists() for n in needed):
         return "skip (already captured)"
     try:
@@ -453,29 +468,30 @@ def process_cell(ckpt_path: Path, data_dir: str, family: str,
     if not (cell_dir / "residuals.npz").exists():
         res = capture_residuals(model, test_loader, device)
         np.savez_compressed(cell_dir / "residuals.npz", **res)
-    # 5) long rollout (chained autoregressive) — σ-stability divergence proxy.
-    if not (cell_dir / "long_rollout.npz").exists():
-        try:
-            roll = capture_long_rollout(model, test_loader, device, n_chain=5)
-            if roll:
-                np.savez_compressed(cell_dir / "long_rollout.npz", **roll)
-        except Exception as e:
-            (cell_dir / "long_rollout.skip").write_text(f"{type(e).__name__}: {e}")
-    # 6) FFT residual — spectral footprint of error along lag axis.
-    if not (cell_dir / "fft_residual.npz").exists():
-        try:
-            fft = capture_fft_residual(model, test_loader, device)
-            if fft:
-                np.savez_compressed(cell_dir / "fft_residual.npz", **fft)
-        except Exception as e:
-            (cell_dir / "fft_residual.skip").write_text(f"{type(e).__name__}: {e}")
-    # 7) Cyclic-shift equivariance check at deployment (T1 in the wild).
-    if not (cell_dir / "equivariance.json").exists():
-        try:
-            eq = capture_equivariance(model, test_loader, device)
-            (cell_dir / "equivariance.json").write_text(json.dumps(eq, indent=2))
-        except Exception as e:
-            (cell_dir / "equivariance.skip").write_text(f"{type(e).__name__}: {e}")
+    if not minimal:
+        # 5) long rollout (chained autoregressive) — σ-stability divergence proxy.
+        if not (cell_dir / "long_rollout.npz").exists():
+            try:
+                roll = capture_long_rollout(model, test_loader, device, n_chain=5)
+                if roll:
+                    np.savez_compressed(cell_dir / "long_rollout.npz", **roll)
+            except Exception as e:
+                (cell_dir / "long_rollout.skip").write_text(f"{type(e).__name__}: {e}")
+        # 6) FFT residual — spectral footprint of error along lag axis.
+        if not (cell_dir / "fft_residual.npz").exists():
+            try:
+                fft = capture_fft_residual(model, test_loader, device)
+                if fft:
+                    np.savez_compressed(cell_dir / "fft_residual.npz", **fft)
+            except Exception as e:
+                (cell_dir / "fft_residual.skip").write_text(f"{type(e).__name__}: {e}")
+        # 7) Cyclic-shift equivariance check at deployment (T1 in the wild).
+        if not (cell_dir / "equivariance.json").exists():
+            try:
+                eq = capture_equivariance(model, test_loader, device)
+                (cell_dir / "equivariance.json").write_text(json.dumps(eq, indent=2))
+            except Exception as e:
+                (cell_dir / "equivariance.skip").write_text(f"{type(e).__name__}: {e}")
     rel = np.array(metrics["rel_l2_per_step"])
     naive = np.array(metrics["naive_rel_l2_per_step"])
     return f"ok (rel_l2_overall={rel.mean():.4f} naive={naive.mean():.4f})"
@@ -487,11 +503,14 @@ def main():
     ap.add_argument("--data_dir", default="data_dde_pde")
     ap.add_argument("--n_viz_samples", type=int, default=4)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--minimal", action="store_true",
+                    help="Only produce per_frame.json + viz_samples.npz "
+                         "(skip long_rollout, fft_residual, equivariance).")
     args = ap.parse_args()
 
     layer = Path(args.layer_root)
     ckpts = sorted(layer.glob("raw/**/best_model.pt"))
-    print(f"found {len(ckpts)} checkpoints under {layer}")
+    print(f"found {len(ckpts)} checkpoints under {layer}", flush=True)
 
     summary = []
     for c in ckpts:
@@ -499,13 +518,14 @@ def main():
         family = parts[-5]
         cell = "/".join(parts[-5:-1])
         msg = process_cell(c, args.data_dir, family,
-                            args.device, args.n_viz_samples)
-        print(f"  {cell}: {msg}")
+                            args.device, args.n_viz_samples,
+                            minimal=args.minimal)
+        print(f"  {cell}: {msg}", flush=True)
         summary.append({"cell": cell, "result": msg})
 
     out_path = layer / "capture_summary.json"
     out_path.write_text(json.dumps(summary, indent=2))
-    print(f"\nwrote {out_path}")
+    print(f"\nwrote {out_path}", flush=True)
 
 
 if __name__ == "__main__":

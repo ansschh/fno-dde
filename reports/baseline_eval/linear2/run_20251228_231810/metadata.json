@@ -1,0 +1,11 @@
+{
+  "model_dir": "outputs\\baseline_v1\\linear2_seed42_20251228_142839",
+  "family": "linear2",
+  "timestamp": "2025-12-28T23:18:14.656877",
+  "splits_evaluated": [
+    "id",
+    "ood_delay",
+    "ood_delay_hole",
+    "ood_history"
+  ]
+}

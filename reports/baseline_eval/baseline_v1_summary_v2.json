@@ -1,0 +1,150 @@
+{
+  "version": "1.1",
+  "generated_at": "2025-12-28T23:05:00-08:00",
+  "git_tag": "baseline_v1_frozen",
+  "split_definitions": {
+    "id": {
+      "description": "In-distribution test set",
+      "split_type": "id",
+      "tau_train_support": "[0.1, 2.0]",
+      "tau_test_support": "[0.1, 2.0]"
+    },
+    "ood_delay": {
+      "description": "OOD-delay extrapolation (large delays unseen during training)",
+      "split_type": "extrapolation",
+      "tau_train_support": "[0.1, 1.3]",
+      "tau_test_support": "(1.3, 2.0]",
+      "notes": "For Linear2, both tau1 and tau2 > 1.3"
+    },
+    "ood_delay_hole": {
+      "description": "OOD-delay interpolation (middle delay band excluded from training)",
+      "split_type": "interpolation",
+      "tau_train_support": "[0.1, 0.9) ∪ (1.1, 2.0]",
+      "tau_test_support": "[0.9, 1.1]",
+      "notes": "For Linear2, both tau1 and tau2 in [0.9, 1.1]"
+    },
+    "ood_history": {
+      "description": "OOD-history (spline history functions instead of Fourier)",
+      "split_type": "distribution_shift",
+      "tau_train_support": "[0.1, 2.0]",
+      "tau_test_support": "[0.1, 2.0]",
+      "history_train": "fourier_series",
+      "history_test": "spline"
+    }
+  },
+  "families": {
+    "hutch": {
+      "model_dir": "outputs/baseline_v1/hutch_seed42_20251228_131919",
+      "architecture": "FNO1dResidual",
+      "parameters": 93025,
+      "id": {
+        "split_name": "id",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.1306,
+        "relL2_orig_p95": 0.5884,
+        "relL2_orig_mean": 0.1998,
+        "relL2_orig_std": 0.1895,
+        "difficulty_l2_norm_median": 27.32,
+        "difficulty_amplitude_median": 1.83
+      },
+      "ood_delay": {
+        "split_name": "ood_delay",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.1945,
+        "relL2_orig_p95": 0.7268,
+        "relL2_orig_mean": 0.2713,
+        "relL2_orig_std": 0.2471,
+        "ood_gap_median": 1.49,
+        "difficulty_l2_norm_median": 42.17,
+        "difficulty_amplitude_median": 7.12,
+        "audit_notes": "Higher amplitude trajectories (1.55x L2 norm) - true extrapolation"
+      },
+      "ood_delay_hole": {
+        "split_name": "ood_delay_hole",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.2120,
+        "relL2_orig_p95": 0.5864,
+        "relL2_orig_mean": 0.2524,
+        "relL2_orig_std": 0.1747,
+        "ood_gap_median": 1.62,
+        "difficulty_l2_norm_median": 26.75,
+        "difficulty_amplitude_median": 2.37,
+        "audit_notes": "Similar difficulty to ID - true interpolation gap"
+      },
+      "ood_history": {
+        "split_name": "ood_history",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.1958,
+        "relL2_orig_p95": 1.1234,
+        "relL2_orig_mean": 0.3517,
+        "relL2_orig_std": 0.3818,
+        "ood_gap_median": 1.50,
+        "difficulty_l2_norm_median": 26.97,
+        "difficulty_amplitude_median": 1.62,
+        "history_roughness_ratio": 1.07,
+        "audit_notes": "Tail degradation (p95) worse than median - spline histories slightly rougher"
+      }
+    },
+    "linear2": {
+      "model_dir": "outputs/baseline_v1/linear2_seed42_20251228_142839",
+      "architecture": "FNO1dResidual",
+      "parameters": 93121,
+      "id": {
+        "split_name": "id",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.5735,
+        "relL2_orig_p95": 1.3912,
+        "relL2_orig_mean": 0.6672,
+        "relL2_orig_std": 0.5163,
+        "difficulty_l2_norm_median": 2.21,
+        "difficulty_amplitude_median": 0.83
+      },
+      "ood_delay": {
+        "split_name": "ood_delay",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.4955,
+        "relL2_orig_p95": 1.0211,
+        "relL2_orig_mean": 0.5475,
+        "relL2_orig_std": 0.5693,
+        "ood_gap_median": 0.86,
+        "difficulty_l2_norm_median": 3.86,
+        "difficulty_amplitude_median": 1.14,
+        "tau_diff_mean": 0.23,
+        "audit_notes": "APPEARS easier than ID due to DENOMINATOR EFFECT: OOD trajectories have 1.75x higher L2 norm. Also, tau1≈tau2 in OOD (tau_diff=0.23 vs ID's 0.64) may make dynamics simpler."
+      },
+      "ood_delay_hole": {
+        "split_name": "ood_delay_hole",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.5667,
+        "relL2_orig_p95": 1.4563,
+        "relL2_orig_mean": 0.6760,
+        "relL2_orig_std": 0.6386,
+        "ood_gap_median": 0.99,
+        "difficulty_l2_norm_median": 2.53,
+        "difficulty_amplitude_median": 0.88,
+        "tau_diff_mean": 0.07,
+        "audit_notes": "Very similar to ID - tau1≈tau2 constraint (tau_diff=0.07) doesn't hurt much"
+      },
+      "ood_history": {
+        "split_name": "ood_history",
+        "n_samples": 2000,
+        "relL2_orig_median": 0.8213,
+        "relL2_orig_p95": 1.9223,
+        "relL2_orig_mean": 1.0167,
+        "relL2_orig_std": 1.3590,
+        "ood_gap_median": 1.43,
+        "difficulty_l2_norm_median": 2.14,
+        "difficulty_amplitude_median": 0.78,
+        "history_roughness_ratio": 1.07,
+        "audit_notes": "Largest degradation - spline histories have higher roughness (1.07x). This is true OOD shift."
+      }
+    }
+  },
+  "key_findings": [
+    "Linear2 OOD-delay 'better than ID' is a DENOMINATOR EFFECT: OOD trajectories have 1.75x higher L2 norm, making relL2 appear lower",
+    "Linear2 OOD-delay also has tau1≈tau2 (tau_diff=0.23 vs 0.64), potentially simplifying dynamics",
+    "OOD-history shows largest true degradation for both families (1.4-1.5x median gap)",
+    "Spline histories have ~7% higher roughness than Fourier, explaining some OOD-history degradation",
+    "Hutch OOD-delay is true extrapolation with 1.55x higher L2 norm trajectories"
+  ]
+}

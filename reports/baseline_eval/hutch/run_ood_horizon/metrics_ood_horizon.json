@@ -1,0 +1,11 @@
+{
+  "split_name": "ood_horizon",
+  "n_samples": 2000,
+  "relL2_orig_median": 0.3712954521179199,
+  "relL2_orig_p95": 1.2043176889419556,
+  "relL2_orig_mean": 0.528995156288147,
+  "relL2_orig_std": 0.3734879493713379,
+  "relL2_orig_p5": 0.13394169509410858,
+  "relL2_orig_min": 0.0832192674279213,
+  "relL2_orig_max": 1.8705224990844727
+}

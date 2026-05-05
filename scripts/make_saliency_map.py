@@ -1,4 +1,12 @@
-"""M8 — Receptive-field saliency: which past frames does LEMO-PC's
+"""M8 — Receptive-field saliency. **DROPPED 2026-05-03** — saliency vs GT
+kernel correlations (Pearson ρ ∈ [-0.16, 0.46]) currently make LEMO-PC
+look weaker than it is, due to FiLM nullification preventing per-family
+kernel adaptation. Even after the FiLM-fix retrain improves the numbers,
+the figure competes with V05 (which we also dropped for the same reason)
+and the headline kernel-recovery story is already carried by T06 (cosine
+similarity table). Script kept on disk; not invoked by any pipeline.
+
+Receptive-field saliency: which past frames does LEMO-PC's
 prediction depend on?
 
 For each family's first-seed clean ckpt:

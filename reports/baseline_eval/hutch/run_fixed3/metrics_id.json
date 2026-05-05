@@ -1,0 +1,11 @@
+{
+  "split_name": "id",
+  "n_samples": 2000,
+  "relL2_orig_median": 1.365539312362671,
+  "relL2_orig_p95": 7.794408798217773,
+  "relL2_orig_mean": 2.361693859100342,
+  "relL2_orig_std": 2.456639528274536,
+  "relL2_orig_p5": 0.8411586880683899,
+  "relL2_orig_min": 0.44549980759620667,
+  "relL2_orig_max": 16.96058464050293
+}

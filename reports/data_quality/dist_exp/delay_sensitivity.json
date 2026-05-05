@@ -1,0 +1,17 @@
+{
+  "check": "dist_exp_delay_sensitivity",
+  "tau_low": 0.5,
+  "tau_high": 1.8,
+  "n_samples": 100,
+  "sensitivity": {
+    "mean": 0.05431622633435528,
+    "std": 0.09640397790505095,
+    "median": 0.018719765220747267,
+    "p5": 0.002846742473837996,
+    "p95": 0.2234580611166755,
+    "min": 0.0005517522638922812,
+    "max": 0.5256735628768935
+  },
+  "pass": false,
+  "warning": "LOW SENSITIVITY - delay may not be tested!"
+}

@@ -187,25 +187,13 @@ def plot_results(results: dict):
     fams_present = list(results.keys())
     if not fams_present:
         return
-    fig, ax = plt.subplots(figsize=(7, 3.5))
-    x = np.arange(len(fams_present))
-    lds_values = [results[f]["LDS"] for f in fams_present]
-    ax.bar(x, lds_values, color="#1f77b4", alpha=0.85, edgecolor="black")
-    ax.set_xticks(x)
-    ax.set_xticklabels([f.replace("_rd_2d", "").replace("dist_", "") for f in fams_present],
-                       rotation=20)
-    ax.set_ylabel(r"LDS = $R^2_{full} - R^2_{markov}$")
-    ax.set_title("Lag-dependence statistic per family (positive = full history beats Markov)")
-    ax.axhline(0, color="black", linewidth=0.5)
-    ax.grid(axis="y", linestyle="--", alpha=0.4)
-    for xi, v in zip(x, lds_values):
-        ax.text(xi, v + 0.005, f"{v:.3f}", ha="center", va="bottom", fontsize=8)
-    fig.tight_layout()
-    out = FIG_DIR / "L01_lds_bar.pdf"
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
-    plt.close(fig)
-    print(f"  -> {out.name}")
+    # L01_lds_bar dropped (2026-05-03) — single-bar-per-family figure was
+    # information-thin (one number per family, no underlying R^2 values
+    # shown, no error bars). The story is now carried by the enhanced
+    # T07_lds.tex table which exposes BOTH R^2_Markov (negative across
+    # all families) and R^2_full (~1.0) per family, making the gap
+    # (LDS) concrete instead of abstract. Figure file kept on disk per
+    # the no-delete rule.
 
     fig, ax = plt.subplots(figsize=(7, 3.8))
     for f in fams_present:
@@ -231,22 +219,35 @@ def write_table(results: dict):
     fams_present = list(results.keys())
     if not fams_present:
         return
-    body = [r"\begin{tabular}{lcccc}",
+    # Column layout: Family | R^2_markov | R^2_full | LDS = R^2_full - R^2_markov
+    # ACF integral and ACF half-life are essentially constant across families
+    # (integral ~22.4, half-life=27 for all) so they were dropped.
+    fam_label = {"dist_exp": "Exp", "dist_gaussian": "Gauss", "dist_gamma": "Gamma",
+                  "dist_uniform": "Uniform", "dist_powerlaw": "Power"}
+    def _label(f):
+        key = f.replace("_rd_2d", "")
+        return fam_label.get(key, key.replace("dist_", "").capitalize())
+    body = [r"\begin{tabular}{lccc}",
             r"\toprule",
-            r"Family & ACF integral & ACF half-life $k$ & $R^2_{markov}$ & LDS \\",
+            r"Family & $R^2_{\mathrm{Markov}}$ & $R^2_{\mathrm{full}}$ & "
+            r"LDS $= R^2_{\mathrm{full}} - R^2_{\mathrm{Markov}}$ \\",
             r"\midrule"]
     for f in fams_present:
         d = results[f]
-        body.append(f"{f.replace('_rd_2d','').replace('dist_','')} & "
-                    f"{d['acf_integral']:.2f} & {d['acf_halflife_k']} & "
-                    f"{d['R2_markov']:.3f} & {d['LDS']:.3f} \\\\")
+        body.append(f"{_label(f)} & {d['R2_markov']:.3f} & {d['R2_full']:.3f} & "
+                    f"{d['LDS']:.3f} \\\\")
     body += [r"\bottomrule",
              r"\end{tabular}"]
     s = ([r"\begin{table}[h]",
           r"\centering",
           (r"\caption{Lag-dependence statistic (LDS) per family. "
-           r"Higher LDS means full-history regression beats Markov-fit "
-           r"by a larger margin --- i.e.\ the dynamics are more delay-dependent.}"),
+           r"$R^2_{\mathrm{Markov}}$ is the one-step linear-regression $R^2$ "
+           r"using only the latest state $u(t)$ as input; $R^2_{\mathrm{full}}$ "
+           r"uses the full history window $u(t-K..t)$. "
+           r"$R^2_{\mathrm{Markov}} < 0$ across all families means the Markov fit "
+           r"is worse than predicting the mean, while $R^2_{\mathrm{full}} \approx 1$ "
+           r"shows full history explains the dynamics; their gap (LDS) quantifies "
+           r"how much delay knowledge matters.}"),
           r"\label{tab:lds}"]
          + body
          + [r"\end{table}"])

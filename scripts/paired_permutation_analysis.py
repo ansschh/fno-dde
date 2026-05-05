@@ -77,6 +77,27 @@ def load_baseline_from_log(model_name):
     return out
 
 
+def load_pod3_baseline(model_name):
+    """MemNO / F-FNO from pod3 final_baselines (Phase A bundle)."""
+    out = {}
+    base = REPO / "extracted/pod3/outputs/final_baselines/raw"
+    if not base.exists():
+        return out
+    for fam in FAMS:
+        for reg in REGIMES:
+            for seed in SEEDS:
+                p = base / fam / reg / model_name / seed / "test_results.json"
+                if not p.exists():
+                    continue
+                try:
+                    d = json.loads(p.read_text())
+                    out[(fam, reg, seed)] = float(d.get("test_rel_l2_mean",
+                                                          d.get("test_rel_l2", float("nan"))))
+                except Exception:
+                    pass
+    return out
+
+
 def paired_permutation_test(a, b, n_iter=10000):
     """Two-sided paired permutation test on (b - a)/b improvement.
     a = LEMO, b = baseline.  Larger = LEMO worse. Improvement ratio (b-a)/b."""
@@ -214,14 +235,18 @@ def main():
     markov = load_baseline_from_log("markov_fno_nd")
     wind = load_baseline_from_log("windowed_fno_nd")
     unet = load_baseline_from_log("unet_nd")
+    memno = load_pod3_baseline("memno_nd")
+    ffno = load_pod3_baseline("ffno_nd")
 
     print(f"Loaded: LEMO_PC={len(lemo_pc)}, LEMO_ND={len(lemo_nd)}")
     print(f"        FNO={len(fno)}, MarkovFNO={len(markov)}, WindFNO={len(wind)}, UNet={len(unet)}")
+    print(f"        MemNO={len(memno)}, F-FNO={len(ffno)}")
     print()
 
     results = {}
     for name, base in [("FNO", fno), ("MarkovFNO", markov), ("WindFNO", wind),
-                         ("UNet", unet), ("LEMO_ND_ablation", lemo_nd)]:
+                         ("UNet", unet), ("MemNO", memno), ("FFNO", ffno),
+                         ("LEMO_ND_ablation", lemo_nd)]:
         if not base:
             continue
         agg = analyze(lemo_pc, base, f"LEMO_PC vs {name}")
@@ -257,7 +282,7 @@ def main():
                 "## Aggregate results (all 5 fams × 3 regimes × 3 seeds = up to 45 paired cells)\n",
                 "| baseline | n_pairs | LEMO_PC mean | baseline mean | improvement % | 95% CI | p (perm) | Holm p< | Hedges g |",
                 "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
-    for name in ["FNO", "MarkovFNO", "WindFNO", "UNet", "LEMO_ND_ablation"]:
+    for name in ["FNO", "MarkovFNO", "WindFNO", "UNet", "MemNO", "FFNO", "LEMO_ND_ablation"]:
         if name not in results:
             continue
         a = results[name]["aggregate"]
@@ -273,7 +298,7 @@ def main():
         )
 
     md_lines.append("\n## Per-regime breakdown\n")
-    for name in ["FNO", "MarkovFNO", "WindFNO", "UNet", "LEMO_ND_ablation"]:
+    for name in ["FNO", "MarkovFNO", "WindFNO", "UNet", "MemNO", "FFNO", "LEMO_ND_ablation"]:
         if name not in results: continue
         md_lines.append(f"### vs {name}")
         md_lines.append("| regime | n_pairs | LEMO mean | baseline mean | improv. % | 95% CI | p |")

@@ -1,0 +1,27 @@
+{
+  "families": [
+    "dist_exp"
+  ],
+  "splits": [
+    "ood_delay",
+    "ood_history",
+    "ood_horizon"
+  ],
+  "seed": 42,
+  "protocol": "A:\\dde research\\dde-fno\\configs\\baseline_protocol.yaml",
+  "generated_at": "2025-12-29T06:52:43.280225",
+  "data_config": {
+    "tau_max": 2.0,
+    "T": 20.0,
+    "T_ood_horizon": 40.0,
+    "dt_out": 0.05,
+    "n_hist": 256,
+    "n_out": 401
+  },
+  "dataset_config": {
+    "n_train": 50000,
+    "n_val": 2000,
+    "n_test": 2000,
+    "n_ood": 2000
+  }
+}
