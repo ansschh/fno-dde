@@ -673,39 +673,39 @@ def a6_calibration_scatter():
 
 def _residuals_for_model_any_layer(model: str, families=FAMS):
     """Loader for A7 — pools per-sample rel-L2 across all regimes/seeds for
-    a given (model, family) cell.  Auto-discovers across known layer roots.
+    a given (model, family) cell.  rglob-based: walks every residuals.npz
+    under REPO/extracted and REPO/outputs and identifies cells from the
+    path parts schema (..., fam, regime, model, seed, residuals.npz).
 
     Returns dict (family) -> ndarray of pooled per-sample rel-L2 across
     all (regime, seed) cells found.
     """
-    layers = ["dist_kernel_v2_p1", "film_ablation_caltech", "film_fix_full",
-              "memory_aware_caltech", "memno_ffno_caltech"]
-    regimes = ["clean", "lowres", "noisy"]
+    fam_set = set(families)
     out = {fam: [] for fam in families}
     seen = set()
-    for layer in layers:
-        for base in (REPO / "outputs" / layer / "raw",
-                     EXT / "pod1" / "outputs" / layer / "raw",
-                     EXT / "pod2" / "outputs" / layer / "raw"):
-            if not base.exists():
+    roots = [REPO / "extracted", REPO / "outputs"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for p in root.rglob("residuals.npz"):
+            try:
+                parts = p.parts
+                seed = parts[-2]; m = parts[-3]; regime = parts[-4]; fam = parts[-5]
+            except IndexError:
                 continue
-            for fam in families:
-                for regime in regimes:
-                    for seed in SEEDS:
-                        p = base / fam / regime / model / seed / "residuals.npz"
-                        key = (fam, regime, model, seed)
-                        if not p.exists() or key in seen:
-                            continue
-                        seen.add(key)
-                        try:
-                            arr = np.load(p)
-                            r = arr.get("rel_l2_per_sample")
-                            if r is None:
-                                r = arr["rel_l2_per_sample"] if "rel_l2_per_sample" in arr.files else None
-                            if r is not None:
-                                out[fam].append(np.asarray(r))
-                        except Exception:
-                            pass
+            if m != model or fam not in fam_set:
+                continue
+            key = (fam, regime, m, seed, str(p))
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                arr = np.load(p)
+                r = arr["rel_l2_per_sample"] if "rel_l2_per_sample" in arr.files else None
+                if r is not None:
+                    out[fam].append(np.asarray(r))
+            except Exception:
+                pass
     out = {fam: (np.concatenate(v) if v else None) for fam, v in out.items()}
     return out
 
