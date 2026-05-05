@@ -150,28 +150,30 @@ def main():
         ax.set_xscale("log"); ax.set_yscale("log")
         ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
         ax.set_xlabel(r"in-distribution rel$L_2$")
-        ax.set_title(reg_label, fontsize=11)
+        ax.text(0.5, 0.97, reg_label, transform=ax.transAxes,
+                ha="center", va="top", fontsize=10, color="dimgrey")
         ax.grid(linestyle=":", alpha=0.4, which="both")
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
     axes[0].set_ylabel(r"mean OOD rel$L_2$")
 
-    # One shared model-color legend.
+    # Single-row model-color legend at bottom.
     model_handles = [plt.Line2D([0],[0], marker="o", color="w",
                                   mfc=MODEL_COLOR[m], mec="black", mew=0.6,
-                                  ms=11, label=MODEL_LABEL[m])
+                                  ms=9, label=MODEL_LABEL[m])
                      for m in MODEL_COLOR if m in all_models]
     fam_legend_text = "Trained on:  " + "   ".join(
         f"{FAM_LETTER[f]}={FAM_LABEL[f]}" for f in FAMS)
 
-    fig.legend(handles=model_handles, loc="lower left",
-               bbox_to_anchor=(0.02, -0.02), title="Model",
-               fontsize=9, frameon=False, title_fontsize=10,
-               ncol=min(len(model_handles), 6))
-    fig.text(0.98, 0.005, fam_legend_text, fontsize=9, color="dimgrey",
+    fig.legend(handles=model_handles, loc="lower center",
+               bbox_to_anchor=(0.5, -0.04),
+               fontsize=7.5, frameon=False,
+               ncol=len(model_handles),
+               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
+    fig.text(0.98, 0.005, fam_legend_text, fontsize=8, color="dimgrey",
              ha="right", va="bottom")
 
-    fig.suptitle("Cross-family transfer (in-distribution vs mean OOD rel$L_2$)",
+    fig.suptitle("",
                  fontsize=12, y=1.01)
     fig.tight_layout(rect=[0, 0.06, 1, 1])
 

@@ -615,8 +615,9 @@ def fig08_equivariance_test():
     ax.set_yscale("log")
     ax.set_xlabel("cyclic shift size $k$")
     ax.set_ylabel(r"$\| f(\rho_k x) - \rho_k f(x) \|_2 / \|f(x)\|_2$")
-    ax.set_title("Cyclic-shift equivariance error vs shift size, all baselines")
-    ax.legend(loc="best", fontsize=8, frameon=False, ncol=2)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16),
+               ncol=len(handles), frameon=False, fontsize=7.5,
+               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
     ax.grid(linestyle="--", alpha=0.4, which="both")
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)

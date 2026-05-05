@@ -184,7 +184,9 @@ def _plot_panel_single_regime(ax, data, regime, x_label, title):
         handles.append(line)
     ax.set_yscale("log")
     ax.set_xlabel(x_label)
-    ax.set_title(title, fontsize=10)
+    if title:
+        ax.text(0.5, 0.97, title, transform=ax.transAxes,
+                ha="center", va="top", fontsize=10, color="dimgrey")
     ax.grid(linestyle=":", alpha=0.4, which="both")
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
@@ -198,11 +200,9 @@ def make_main(data_fgsm, data_noise):
     """
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.6))
     hL = _plot_panel_single_regime(axL, data_fgsm, "clean",
-                                    r"FGSM perturbation $\varepsilon$",
-                                    "Worst-case input sensitivity (FGSM)")
+                                    r"FGSM perturbation $\varepsilon$", "")
     hR = _plot_panel_single_regime(axR, data_noise, "clean",
-                                    r"Gaussian noise std $\sigma$",
-                                    "Average-case input sensitivity (Gaussian)")
+                                    r"Gaussian noise std $\sigma$", "")
     axL.set_ylabel(r"test rel$L_2$")
     axR.set_ylabel(r"test rel$L_2$")
     seen = set(); shared = []
@@ -210,11 +210,10 @@ def make_main(data_fgsm, data_noise):
         if h.get_label() not in seen:
             seen.add(h.get_label()); shared.append(h)
     fig.legend(handles=shared, loc="lower center",
-               bbox_to_anchor=(0.5, -0.02),
-               ncol=min(len(shared), 6), frameon=False, fontsize=10)
-    fig.suptitle("Robustness to input perturbation",
-                 fontsize=12, y=1.0)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+               bbox_to_anchor=(0.5, -0.04),
+               ncol=len(shared), frameon=False, fontsize=7.5,
+               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
+    fig.tight_layout(rect=[0, 0.08, 1, 1])
     out = FIG_DIR / "F11_robustness.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
@@ -250,12 +249,10 @@ def make_appendix(data_fgsm, data_noise):
                           xy=(0.5, -0.18), xycoords="axes fraction",
                           ha="center", fontsize=9, color="dimgrey")
     fig.legend(handles=list(handles_all.values()),
-               loc="lower center", bbox_to_anchor=(0.5, -0.02),
-               ncol=min(len(handles_all), 6), frameon=False, fontsize=10)
-    fig.suptitle("Robustness to input perturbation, broken out by regime "
-                 "(appendix companion to F11)",
-                 fontsize=12, y=1.0)
-    fig.tight_layout(rect=[0, 0.05, 1, 0.99])
+               loc="lower center", bbox_to_anchor=(0.5, -0.03),
+               ncol=len(handles_all), frameon=False, fontsize=7.5,
+               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
+    fig.tight_layout(rect=[0, 0.07, 1, 1])
     out = FIG_DIR / "F11_robustness_appendix.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")

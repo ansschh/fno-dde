@@ -209,16 +209,13 @@ def main():
     ax_right.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
 
     ax_left.set_ylabel(r"rel-$L_2$ (mean over cells)")
-    fig.suptitle("Boundary audit: rollout edges (interior skipped)",
-                  fontsize=11, y=0.99)
 
-    # Single shared legend below the panels with explicit room reserved.
+    # Single-row legend below the panels.
     handles, labels = ax_left.get_legend_handles_labels()
-    n_models = len([h for h in labels if "boundary" not in h])
-    ncol = min(n_models + 1, 4)
     fig.legend(handles, labels, loc="lower center",
-                bbox_to_anchor=(0.5, 0.005), ncol=ncol,
-                fontsize=9, frameon=False)
+                bbox_to_anchor=(0.5, -0.02), ncol=len(handles),
+                fontsize=7.5, frameon=False,
+                columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
     fig.subplots_adjust(top=0.92, bottom=0.20, left=0.10, right=0.98,
                          wspace=0.06)
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
