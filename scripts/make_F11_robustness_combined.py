@@ -244,10 +244,12 @@ def make_appendix(data_fgsm, data_noise):
         axes[1, j].set_xlabel("")
     axes[0, 1].annotate(r"FGSM perturbation $\varepsilon$",
                           xy=(0.5, -0.18), xycoords="axes fraction",
-                          ha="center", fontsize=9, color="dimgrey")
+                          ha="center", fontsize=10, color="black",
+                          fontfamily="serif", fontname="Times New Roman")
     axes[1, 1].annotate(r"Gaussian noise std $\sigma$",
                           xy=(0.5, -0.18), xycoords="axes fraction",
-                          ha="center", fontsize=9, color="dimgrey")
+                          ha="center", fontsize=10, color="black",
+                          fontfamily="serif", fontname="Times New Roman")
     fig.legend(handles=list(handles_all.values()),
                loc="lower center", bbox_to_anchor=(0.5, -0.03),
                ncol=len(handles_all), frameon=False, fontsize=7.5,
