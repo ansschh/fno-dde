@@ -45,18 +45,54 @@ FAM_LABELS = {"dist_exp_rd_2d": "Exp", "dist_gaussian_rd_2d": "Gauss",
 SEEDS = ["s42", "s123", "s456"]
 
 
+_LEMO_VIZ_INDEX: dict | None = None
+_LEMO_KER_INDEX: dict | None = None
+
+
+def _build_lemo_index(filename: str) -> dict:
+    idx = {}
+    roots = [REPO / "extracted", REPO / "outputs"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for f in root.rglob(filename):
+            try:
+                parts = f.parts
+                seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
+            except IndexError:
+                continue
+            if model != "lemo_pc_nd":
+                continue
+            idx.setdefault((fam, reg, seed), f)
+    return idx
+
+
 def load_viz(fam, regime="clean", seed="s42"):
+    """LEMO-PC viz_samples.npz: prefers the legacy BASE path, falls back to
+    rglob discovery so new pod_pull layouts also work."""
     p = BASE / fam / regime / "lemo_pc_nd" / seed / "viz_samples.npz"
-    if not p.exists():
+    if p.exists():
+        return np.load(p)
+    global _LEMO_VIZ_INDEX
+    if _LEMO_VIZ_INDEX is None:
+        _LEMO_VIZ_INDEX = _build_lemo_index("viz_samples.npz")
+    p2 = _LEMO_VIZ_INDEX.get((fam, regime, seed))
+    if p2 is None or not p2.exists():
         return None
-    return np.load(p)
+    return np.load(p2)
 
 
 def load_kernel(fam, regime="clean", seed="s42"):
     p = BASE / fam / regime / "lemo_pc_nd" / seed / "kernel_snapshot.npz"
-    if not p.exists():
+    if p.exists():
+        return np.load(p)
+    global _LEMO_KER_INDEX
+    if _LEMO_KER_INDEX is None:
+        _LEMO_KER_INDEX = _build_lemo_index("kernel_snapshot.npz")
+    p2 = _LEMO_KER_INDEX.get((fam, regime, seed))
+    if p2 is None or not p2.exists():
         return None
-    return np.load(p)
+    return np.load(p2)
 
 
 def _sym_lim(arr):
@@ -66,13 +102,44 @@ def _sym_lim(arr):
 
 FNO_BASE = REPO / "outputs" / "film_ablation_caltech" / "raw"
 
+# rglob fallback: any pod_pull / output sweep with the (fam, reg, fno_film_nd, seed)
+# layout. Picked once at import time to keep load_viz_fno cheap.
+_FNO_FILM_VIZ_INDEX: dict | None = None
+
+
+def _build_fno_film_viz_index():
+    global _FNO_FILM_VIZ_INDEX
+    if _FNO_FILM_VIZ_INDEX is not None:
+        return _FNO_FILM_VIZ_INDEX
+    _FNO_FILM_VIZ_INDEX = {}
+    roots = [REPO / "extracted", REPO / "outputs"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for f in root.rglob("viz_samples.npz"):
+            try:
+                parts = f.parts
+                seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
+            except IndexError:
+                continue
+            if model != "fno_film_nd":
+                continue
+            _FNO_FILM_VIZ_INDEX.setdefault((fam, reg, seed), f)
+    return _FNO_FILM_VIZ_INDEX
+
 
 def load_viz_fno(fam, regime="clean", seed="s42"):
-    """Load FNO+FiLM viz_samples.npz from local outputs/."""
+    """Load FNO+FiLM viz_samples.npz: prefers the legacy local film_ablation_caltech
+    path, falls back to rglob discovery across pod_pulls / runpod sweep dirs.
+    """
     p = FNO_BASE / fam / regime / "fno_film_nd" / seed / "viz_samples.npz"
-    if not p.exists():
+    if p.exists():
+        return np.load(p)
+    idx = _build_fno_film_viz_index()
+    p2 = idx.get((fam, regime, seed))
+    if p2 is None or not p2.exists():
         return None
-    return np.load(p)
+    return np.load(p2)
 
 
 def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
@@ -647,8 +714,21 @@ def fig_v05_kernel_recovery():
         K_full = np.zeros((in_ch, out_ch, n_modes_full), dtype=K.dtype)
         n_keep = min(M, n_modes_full)
         K_full[..., :n_keep] = K[..., :n_keep]
-        K_t = np.fft.irfft(K_full, n=L_time, axis=-1)  # (in, out, L_time)
-        K_amp = np.abs(K_t).mean(axis=(0, 1))           # (L_time,)
+        K_t = np.fft.irfft(K_full, n=L_time, axis=-1)  # (in, out, L_time) real
+        # Aggregation: pick the dominant channel pair (largest L2 norm). This
+        # avoids the phase-destruction artefact of np.abs(K_t).mean(axis=(0,1))
+        # which produces spurious oscillations because different (i, o) pairs
+        # encode the same temporal pattern with different phase, and absolute-
+        # value averaging cannot cancel those phases coherently.
+        norms = np.linalg.norm(K_t, axis=-1)             # (in, out)
+        i_dom, o_dom = np.unravel_index(np.argmax(norms), norms.shape)
+        K_dom = K_t[i_dom, o_dom]                         # (L_time,)
+        # Sign: flip so the kernel is positive at its peak (kernels are
+        # positive functions; sign of the dominant SVD direction is arbitrary).
+        peak_t = int(np.argmax(np.abs(K_dom)))
+        if K_dom[peak_t] < 0:
+            K_dom = -K_dom
+        K_amp = np.abs(K_dom)                             # (L_time,) for plotting
         L = L_time   # downstream uses L for the GT-sampling axis
         # Ground truth shape (normalized).
         t = np.arange(L) / max(L - 1, 1)
@@ -775,7 +855,14 @@ def main():
         # V03 dropped: signed LEMO error is now row 2 of V01_family_triptych_diff.
         # V04 dropped: not referenced in paper; redundant with V05 (kernel
         # recovery) for kernel structure and F07 (op-norm trajectory) for σ-bound.
-        ("V05 kernel recovery",     fig_v05_kernel_recovery),
+        # V05 dropped (2026-05-03): the dominant-pair aggregation fix exposed
+        # that LEMO-PC's current learned kernel is bimodal/mode-2 due to FiLM
+        # nullification, making the kernel-recovery story look weaker than it
+        # actually is. Even after the FiLM-fix retrain improves CosSim, V05
+        # competes with the much-stronger T06 (kernel-recovery cosine table)
+        # which already carries the per-family numbers without requiring a
+        # visualization that picks a single channel pair.
+        # ("V05 kernel recovery",     fig_v05_kernel_recovery),
         ("V06 residual FFT",        fig_v06_residual_fft),
     ]:
         try:

@@ -36,22 +36,36 @@ FAMS = ["dist_exp_rd_2d", "dist_gaussian_rd_2d", "dist_gamma_rd_2d",
         "dist_uniform_rd_2d", "dist_powerlaw_rd_2d"]
 
 MODEL_COLOR = {
-    "lemo_pc_nd":   "#d62728",
-    "lemo_nd":      "#ff7f0e",
-    "fno_nd":       "#1f77b4",
-    "fno_film_nd":  "#17becf",
-    "markov_fno_nd": "#2ca02c",
-    "windowed_fno_nd": "#9467bd",
-    "ffno_nd":      "#8c564b",
-    "memno_nd":     "#e377c2",
-    "unet_nd":      "#7f7f7f",
+    "lemo_pc_nd":                 "#d62728",
+    "lemo_nd":                    "#ff7f0e",
+    "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "fno_nd":                     "#1f77b4",
+    "fno_film_nd":                "#17becf",
+    "noneq_film_nd":              "#c5b0d5",
+    "markov_fno_nd":              "#2ca02c",
+    "windowed_fno_nd":            "#9467bd",
+    "ffno_nd":                    "#8c564b",
+    "memno_nd":                   "#e377c2",
+    "s4_nd":                      "#bcbd22",
+    "nide_nd":                    "#aec7e8",
+    "ndde_nd":                    "#98df8a",
+    "unet_nd":                    "#7f7f7f",
 }
 MODEL_LABEL = {
-    "lemo_pc_nd":   "LEMO-PC", "lemo_nd": "LEMO",
-    "fno_nd":       "FNO",     "fno_film_nd": "FNO+FiLM",
-    "markov_fno_nd": "Markov-FNO", "windowed_fno_nd": "Window-FNO",
-    "ffno_nd":      "F-FNO",   "memno_nd": "MemNO",
-    "unet_nd":      "UNet",
+    "lemo_pc_nd":                 "LEMO-PC",
+    "lemo_nd":                    "LEMO",
+    "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
+    "fno_nd":                     "FNO",
+    "fno_film_nd":                "FNO+FiLM",
+    "noneq_film_nd":              "Non-equiv +FiLM",
+    "markov_fno_nd":              "Markov-FNO",
+    "windowed_fno_nd":            "Window-FNO",
+    "ffno_nd":                    "F-FNO",
+    "memno_nd":                   "MemNO",
+    "s4_nd":                      "S4",
+    "nide_nd":                    "NIDE",
+    "ndde_nd":                    "NDDE",
+    "unet_nd":                    "UNet",
 }
 
 
@@ -138,18 +152,17 @@ def main():
     print(f"Wrote {OUT_JSON}")
 
     # ------------------------------------------------------------------
-    # Figure: aggregate per-position rel-L2 for each model + boundary shading
-    # + ratio annotation per model.
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # Single-panel layout, full rollout, log-y. Legend below the figure so
-    # multi-model fill-ins (FNO/Markov-FNO/Window-FNO/UNet/...) don't crowd
-    # the plot area.
+    # Figure: 1x2 zoom on the rollout edges (first ZOOM steps + last ZOOM
+    # steps). The interior 87% of the rollout (t in [ZOOM..T-ZOOM]) carries
+    # no architectural signal — both LEMO-PC and FNO+FiLM grow smoothly
+    # there — so we skip it and zoom on the edges where the cyclic-FFT
+    # vs. non-cyclic-FFT difference is visible. The b/i ratio is in the
+    # legend so reviewers can read the architectural contrast at a glance.
     # ------------------------------------------------------------------
     BROKEN_THRESHOLD = 0.5
     T = max(d["T"] for d in agg.values())
+    ZOOM = 10
 
-    fig, ax = plt.subplots(figsize=(8.5, 4.4))
     plotted = []
     for model in MODEL_COLOR:
         if model not in agg:
@@ -159,36 +172,55 @@ def main():
                   f"{agg[model]['interior_mean']:.3e} (> {BROKEN_THRESHOLD})")
             continue
         d = agg[model]
-        color = MODEL_COLOR[model]
-        m = np.array(d["mean_per_t"])
-        s = np.array(d["std_per_t"])
-        ts = np.arange(len(m))
-        label = f"{MODEL_LABEL[model]} (b/i = {d['ratio']:.2f})"
-        ax.plot(ts, m, color=color, lw=1.8, label=label)
-        ax.fill_between(ts, np.maximum(m - s, 1e-5), m + s,
-                         color=color, alpha=0.15, linewidth=0)
-        plotted.append(model)
+        plotted.append({
+            "model": model,
+            "color": MODEL_COLOR[model],
+            "label": f"{MODEL_LABEL[model]} (b/i = {d['ratio']:.2f})",
+            "mean":  np.array(d["mean_per_t"]),
+            "std":   np.array(d["std_per_t"]),
+        })
 
-    ax.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
-                label=f"boundary (t<{B} or t≥T-{B})")
-    ax.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
-    ax.set_xlim(-0.5, T - 0.5)
-    ax.set_yscale("log")
-    ax.set_xlabel("rollout step $t$")
-    ax.set_ylabel(r"rel-$L_2$ (mean over cells)")
-    ax.set_title("Per-position boundary audit", fontsize=11)
-    ax.grid(linestyle=":", alpha=0.4, which="both")
-    for sp in ("top", "right"):
-        ax.spines[sp].set_visible(False)
+    fig, axes = plt.subplots(1, 2, figsize=(8.5, 4.0), sharey=True,
+                              gridspec_kw={"wspace": 0.06})
+    ax_left, ax_right = axes
+    ts_full = np.arange(T)
+    panels = [
+        (ax_left,  slice(0, ZOOM),         (-0.5, ZOOM - 0.5),       "first {} steps".format(ZOOM)),
+        (ax_right, slice(T - ZOOM, T),     (T - ZOOM - 0.5, T - 0.5), "last {} steps".format(ZOOM)),
+    ]
+    for ax, sl, xlim, _name in panels:
+        ts = ts_full[sl]
+        for p in plotted:
+            ax.plot(ts, p["mean"][sl], color=p["color"], lw=1.8, label=p["label"])
+            ax.fill_between(ts,
+                             np.maximum(p["mean"][sl] - p["std"][sl], 1e-5),
+                             p["mean"][sl] + p["std"][sl],
+                             color=p["color"], alpha=0.15, linewidth=0)
+        ax.set_xlim(*xlim)
+        ax.set_yscale("log")
+        ax.set_xlabel("rollout step $t$")
+        ax.grid(linestyle=":", alpha=0.4, which="both")
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
 
-    # Legend below the figure — wraps to multiple rows if many models.
-    handles, labels = ax.get_legend_handles_labels()
+    # Boundary shading on each panel (only the band that falls within view).
+    ax_left.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
+                     label=f"boundary (t<{B} or t≥T-{B})")
+    ax_right.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+
+    ax_left.set_ylabel(r"rel-$L_2$ (mean over cells)")
+    fig.suptitle("Boundary audit: rollout edges (interior skipped)",
+                  fontsize=11, y=0.99)
+
+    # Single shared legend below the panels with explicit room reserved.
+    handles, labels = ax_left.get_legend_handles_labels()
     n_models = len([h for h in labels if "boundary" not in h])
-    ncol = min(n_models + 1, 4)  # +1 for the boundary entry
+    ncol = min(n_models + 1, 4)
     fig.legend(handles, labels, loc="lower center",
-                bbox_to_anchor=(0.5, -0.04), ncol=ncol,
+                bbox_to_anchor=(0.5, 0.005), ncol=ncol,
                 fontsize=9, frameon=False)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    fig.subplots_adjust(top=0.92, bottom=0.20, left=0.10, right=0.98,
+                         wspace=0.06)
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_FIG, bbox_inches="tight")
     fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150, bbox_inches="tight")
@@ -196,9 +228,9 @@ def main():
     print(f"Wrote {OUT_FIG}")
 
     print("\n=== Boundary/interior ratios ===")
-    for model in plotted:
-        d = agg[model]
-        print(f"  {MODEL_LABEL[model]:<12s}  n={d['n_cells']:3d}  "
+    for p in plotted:
+        d = agg[p["model"]]
+        print(f"  {MODEL_LABEL[p['model']]:<12s}  n={d['n_cells']:3d}  "
               f"bnd={d['boundary_mean']:.4e}  int={d['interior_mean']:.4e}  "
               f"ratio={d['ratio']:.3f}")
 

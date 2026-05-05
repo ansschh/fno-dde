@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import warnings
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -50,26 +51,45 @@ REGIMES = ["clean", "lowres", "noisy"]
 SEEDS = ["s42", "s123", "s456"]
 
 MODEL_LABELS = {
-    "lemo_pc_nd":     "LEMO-PC",
-    "lemo_nd":        "LEMO",
-    "fno_nd":         "FNO",
-    "markov_fno_nd":  "Markov-FNO",
-    "windowed_fno_nd": "Window-FNO",
-    "memno_nd":       "MemNO",
-    "ffno_nd":        "F-FNO",
-    "unet_nd":        "UNet",
+    "lemo_pc_nd":                 "LEMO-PC",
+    "lemo_nd":                    "LEMO",
+    "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
+    "lemo_bcorrect_nd":           "LEMO-PC (b-correct)",
+    "fno_nd":                     "FNO",
+    "fno_film_nd":                "FNO+FiLM",
+    "noneq_film_nd":              "Non-equiv +FiLM",
+    "markov_fno_nd":              "Markov-FNO",
+    "windowed_fno_nd":            "Window-FNO",
+    "memno_nd":                   "MemNO",
+    "ffno_nd":                    "F-FNO",
+    "s4_nd":                      "S4",
+    "nide_nd":                    "NIDE",
+    "ndde_nd":                    "NDDE",
+    "unet_nd":                    "UNet",
 }
-MODEL_ORDER = ["lemo_pc_nd", "lemo_nd", "fno_nd", "markov_fno_nd",
-               "windowed_fno_nd", "memno_nd", "ffno_nd"]
+MODEL_ORDER = [
+    "lemo_pc_nd", "lemo_nd", "causal_smooth_lemo_pc_nd",
+    "fno_film_nd", "noneq_film_nd",
+    "fno_nd", "markov_fno_nd", "windowed_fno_nd",
+    "memno_nd", "ffno_nd", "s4_nd", "nide_nd", "ndde_nd",
+    "unet_nd",
+]
 MODEL_COLOR = {
-    "lemo_pc_nd":     "#d62728",  # red
-    "lemo_nd":        "#ff7f0e",  # orange
-    "fno_nd":         "#1f77b4",  # blue
-    "markov_fno_nd":  "#2ca02c",  # green
-    "windowed_fno_nd": "#9467bd", # purple
-    "memno_nd":       "#8c564b",  # brown
-    "ffno_nd":        "#e377c2",  # pink
-    "unet_nd":        "#7f7f7f",  # gray
+    "lemo_pc_nd":                 "#d62728",  # red
+    "lemo_nd":                    "#ff7f0e",  # orange
+    "causal_smooth_lemo_pc_nd":   "#c49c94",  # taupe
+    "lemo_bcorrect_nd":           "#bcbd22",  # olive (rarely shown)
+    "fno_nd":                     "#1f77b4",  # blue
+    "fno_film_nd":                "#17becf",  # cyan
+    "noneq_film_nd":              "#c5b0d5",  # lavender
+    "markov_fno_nd":              "#2ca02c",  # green
+    "windowed_fno_nd":            "#9467bd",  # purple
+    "memno_nd":                   "#e377c2",  # pink
+    "ffno_nd":                    "#8c564b",  # brown
+    "s4_nd":                      "#bcbd22",  # olive
+    "nide_nd":                    "#aec7e8",  # light blue
+    "ndde_nd":                    "#98df8a",  # light green
+    "unet_nd":                    "#7f7f7f",  # gray
 }
 
 
@@ -82,95 +102,75 @@ def _try_json(p: Path):
         return None
 
 
-def load_lemo_test(model: str = "lemo_pc_nd") -> dict:
-    """LEMO_PC / LEMO numbers from extracted/pod1/.../dist_kernel_v2_p1/raw/."""
-    out = {}
-    base = EXT / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw"
-    for fam in FAMS:
-        for reg in REGIMES:
-            for seed in SEEDS:
-                p = base / fam / reg / model / seed / "test_results.json"
-                d = _try_json(p)
-                if d is not None:
-                    out[(fam, reg, seed)] = float(d.get("test_rel_l2_mean",
-                                                        d.get("test_rel_l2", float("nan"))))
-    return out
+def _discover_jsons(filename: str) -> dict:
+    """rglob across `extracted/` and `outputs/` for files named `<filename>`,
+    interpreting paths as `<...>/<fam>/<reg>/<model>/<seed>/<filename>` (the
+    layout used uniformly across pod_pulls_2026_05_03_final/*, pod1/v2_p1,
+    film_ablation_caltech, memno_ffno_runpod, memory_aware_runpod, etc.).
 
-
-_LOG_PAT = re.compile(r"=== FINAL test relL2 = ([0-9.]+) ===")
-
-
-def load_baseline_from_log(model: str) -> dict:
-    """Read final relL2 from extracted/pod2/.../dist_kernel_v2_p2/logs/*.log."""
-    out = {}
-    log_dir = EXT / "pod2" / "outputs" / "dist_kernel_v2_p2" / "logs"
-    if not log_dir.exists():
-        return out
-    seed_to_num = {"s42": "42", "s123": "123", "s456": "456"}
-    for fam in FAMS:
-        for reg in REGIMES:
-            for seed in SEEDS:
-                seed_num = seed_to_num[seed]
-                logf = log_dir / f"{fam}_{model}_{reg}_s{seed_num}.log"
-                if not logf.exists():
-                    continue
-                m = _LOG_PAT.search(logf.read_text(errors="replace"))
-                if m:
-                    out[(fam, reg, seed)] = float(m.group(1))
-    return out
-
-
-def load_pod3_baseline(model: str) -> dict:
-    """MemNO / F-FNO from pod3 final_baselines (after Phase A bundle pulled)."""
-    out = {}
-    pod3 = EXT / "pod3" / "outputs" / "final_baselines" / "raw"
-    if not pod3.exists():
-        # fallback to alt extraction location:
-        for alt in (EXT / "pod3", EXT / "pod3_phaseA"):
-            cand = alt / "outputs" / "final_baselines" / "raw"
-            if cand.exists():
-                pod3 = cand
-                break
-    if not pod3.exists():
-        return out
-    for fam in FAMS:
-        for reg in REGIMES:
-            for seed in SEEDS:
-                p = pod3 / fam / reg / model / seed / "test_results.json"
-                d = _try_json(p)
-                if d is not None:
-                    out[(fam, reg, seed)] = float(d.get("test_rel_l2_mean",
-                                                        d.get("test_rel_l2", float("nan"))))
-    return out
+    Returns {model: {(fam, reg, seed): json_data}}. Dedupes on
+    (model, fam, reg, seed) so duplicates across multiple roots don't
+    double-count the same cell.
+    """
+    out = defaultdict(dict)
+    seen = set()
+    roots = [REPO / "extracted", REPO / "outputs"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for f in root.rglob(filename):
+            try:
+                parts = f.parts
+                seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
+            except IndexError:
+                continue
+            if fam not in FAMS or reg not in REGIMES or seed not in SEEDS:
+                continue
+            if model not in MODEL_LABELS:
+                continue
+            key = (model, fam, reg, seed)
+            if key in seen:
+                continue
+            data = _try_json(f)
+            if data is None:
+                continue
+            seen.add(key)
+            out[model][(fam, reg, seed)] = data
+    return dict(out)
 
 
 def gather_all_models() -> dict:
-    """Returns {model: {(fam, reg, seed): relL2}}.  Skips models with no data."""
-    data = {
-        "lemo_pc_nd": load_lemo_test("lemo_pc_nd"),
-        "lemo_nd":    load_lemo_test("lemo_nd"),
-        "fno_nd":         load_baseline_from_log("fno_nd"),
-        "markov_fno_nd":  load_baseline_from_log("markov_fno_nd"),
-        "windowed_fno_nd": load_baseline_from_log("windowed_fno_nd"),
-        "memno_nd":       load_pod3_baseline("memno_nd"),
-        "ffno_nd":        load_pod3_baseline("ffno_nd"),
-    }
-    # Drop empty.
-    return {m: d for m, d in data.items() if len(d) >= 1}
+    """Returns {model: {(fam, reg, seed): test_rel_l2 float}}.
+
+    rglob discovery picks up every test_results.json under extracted/ or
+    outputs/ for any model in MODEL_LABELS. Keeps the first match per cell;
+    cells without test_rel_l2_mean are dropped.
+    """
+    discovered = _discover_jsons("test_results.json")
+    out = {}
+    for model, cells in discovered.items():
+        per_cell = {}
+        for k, d in cells.items():
+            v = d.get("test_rel_l2_mean", d.get("test_rel_l2"))
+            if v is None:
+                continue
+            try:
+                per_cell[k] = float(v)
+            except (TypeError, ValueError):
+                continue
+        if per_cell:
+            out[model] = per_cell
+    return out
 
 
 def load_history(model: str = "lemo_pc_nd"):
-    """Returns {(fam, reg, seed): history_dict} from history.json files (if present)."""
-    out = {}
-    base = EXT / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw"
-    for fam in FAMS:
-        for reg in REGIMES:
-            for seed in SEEDS:
-                p = base / fam / reg / model / seed / "history.json"
-                d = _try_json(p)
-                if d is not None:
-                    out[(fam, reg, seed)] = d
-    return out
+    """Returns {(fam, reg, seed): history_dict} for the requested model,
+    via the same rglob discoverer used by gather_all_models()."""
+    discovered = _discover_jsons("history.json")
+    return discovered.get(model, {})
+
+
+_LOG_PAT = re.compile(r"=== FINAL test relL2 = ([0-9.]+) ===")  # legacy, kept for safety
 
 
 # -------------------- statistics --------------------
@@ -411,60 +411,97 @@ def fig05_training_curves(history_by_model: dict):
 
 
 def fig06_perframe_rollout():
-    """Per-rollout-step rel_l2 from per_frame.json files (if present)."""
-    base = EXT / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw"
-    files = list(base.glob("*/clean/lemo_pc_nd/*/per_frame.json"))
-    if not files:
+    """Per-rollout-step rel_l2 across all models with per_frame.json data.
+
+    Discovers per_frame.json files via rglob across extracted/ and outputs/
+    so every memory-aware baseline (s4_nd, nide_nd, ndde_nd, memno_nd,
+    ffno_nd, fno_film_nd, noneq_film_nd, causal_smooth_lemo_pc_nd, etc.)
+    is auto-picked-up alongside the original cyclic-FFT models.
+    Naive copy baseline shown once per panel.
+    """
+    perframe = _discover_jsons("per_frame.json")
+    if not perframe:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.2 * len(FAMS), 3.5),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.5 * len(FAMS), 3.8),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
-    plotted = False
+    handles, labels_seen = [], []
+    plotted_any = False
     for ax, fam in zip(axes, FAMS):
-        seeds = list((base / fam / "clean" / "lemo_pc_nd").glob("s*"))
-        if not seeds:
-            ax.set_visible(False)
-            continue
-        curves = []
-        naive_curves = []
-        for sd in seeds:
-            d = _try_json(sd / "per_frame.json")
-            if d is None:
+        plotted_in_panel = False
+        # Per-model curves (clean regime)
+        for model in MODEL_ORDER:
+            cells = perframe.get(model, {})
+            curves = []
+            for seed in SEEDS:
+                d = cells.get((fam, "clean", seed))
+                if d is None:
+                    continue
+                r = d.get("rel_l2_per_step", [])
+                if r:
+                    curves.append(np.array(r))
+            if not curves:
                 continue
-            r = d.get("rel_l2_per_step", [])
-            n = d.get("naive_rel_l2_per_step", [])
-            if r:
-                curves.append(np.array(r))
-            if n:
-                naive_curves.append(np.array(n))
-        if not curves:
+            L = min(len(c) for c in curves)
+            c_arr = np.stack([c[:L] for c in curves], axis=0)
+            steps = np.arange(L)
+            color = MODEL_COLOR.get(model, "#888888")
+            line, = ax.plot(steps, c_arr.mean(axis=0), color=color, lw=1.4,
+                             label=MODEL_LABELS.get(model, model))
+            if c_arr.shape[0] > 1:
+                ax.fill_between(steps,
+                                 c_arr.mean(axis=0) - c_arr.std(axis=0),
+                                 c_arr.mean(axis=0) + c_arr.std(axis=0),
+                                 color=color, alpha=0.18, linewidth=0)
+            if MODEL_LABELS.get(model, model) not in labels_seen:
+                handles.append(line)
+                labels_seen.append(MODEL_LABELS.get(model, model))
+            plotted_in_panel = True
+            plotted_any = True
+        # Naive baseline: pull from any model's per_frame.json (the naive
+        # "copy last frame" curve does not depend on model architecture, so
+        # we dedupe by (fam, seed) across all models).
+        naive_curves = []
+        seen_naive = set()
+        for model in MODEL_ORDER:
+            cells = perframe.get(model, {})
+            for seed in SEEDS:
+                if (fam, seed) in seen_naive:
+                    continue
+                d = cells.get((fam, "clean", seed))
+                if d is None:
+                    continue
+                n = d.get("naive_rel_l2_per_step", [])
+                if n:
+                    naive_curves.append(np.array(n))
+                    seen_naive.add((fam, seed))
+        if naive_curves:
+            L = min(len(c) for c in naive_curves)
+            n_arr = np.stack([c[:L] for c in naive_curves], axis=0)
+            steps = np.arange(L)
+            line, = ax.plot(steps, n_arr.mean(axis=0), color="grey", lw=1.0,
+                             linestyle="--", label="naive copy")
+            if "naive copy" not in labels_seen:
+                handles.append(line)
+                labels_seen.append("naive copy")
+        if not plotted_in_panel:
             ax.set_visible(False)
             continue
-        L = min(len(c) for c in curves)
-        c_arr = np.stack([c[:L] for c in curves], axis=0)
-        steps = np.arange(L)
-        ax.plot(steps, c_arr.mean(axis=0), color=MODEL_COLOR["lemo_pc_nd"], lw=1.5,
-                label="LEMO-PC")
-        ax.fill_between(steps, c_arr.mean(axis=0) - c_arr.std(axis=0),
-                         c_arr.mean(axis=0) + c_arr.std(axis=0),
-                         color=MODEL_COLOR["lemo_pc_nd"], alpha=0.25)
-        if naive_curves:
-            n_arr = np.stack([c[:L] for c in naive_curves], axis=0)
-            ax.plot(steps, n_arr.mean(axis=0), color="grey", lw=1.0, linestyle="--",
-                    label="naive copy")
         ax.set_yscale("log")
         ax.set_xlabel("rollout step t")
         ax.set_title(FAM_LABELS[fam])
         ax.grid(linestyle="--", alpha=0.4)
-        plotted = True
-    if not plotted:
+    if not plotted_any:
         plt.close(fig)
         return None
     axes[0].set_ylabel(r"per-step rel$L_2$")
-    axes[0].legend(loc="lower right", fontsize=8)
-    fig.suptitle("Per-rollout-step rel$L_2$ (LEMO-PC, clean, mean +/- std over seeds)")
-    fig.tight_layout()
+    if handles:
+        fig.legend(handles, labels_seen, loc="lower center",
+                    bbox_to_anchor=(0.5, -0.02),
+                    ncol=min(len(handles), 7), frameon=False, fontsize=9)
+    fig.suptitle(r"Per-rollout-step rel$L_2$ (clean regime, mean over seeds, all baselines)")
+    fig.tight_layout(rect=[0, 0.04, 1, 1])
     out = FIG_DIR / "F06_perframe_rollout.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)
@@ -506,36 +543,66 @@ def fig07_op_norm_trajectory(history: dict):
 
 
 def fig08_equivariance_test():
-    """T1-shift errors per shift size (from equivariance.json files)."""
-    base = EXT / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw"
-    files = list(base.glob("*/clean/lemo_pc_nd/*/equivariance.json"))
-    if not files:
-        return None
-    rows = []  # (shift, err)
-    for f in files:
-        d = _try_json(f)
-        if d is None:
+    """T1 cyclic-shift equivariance error per shift size k, multi-model.
+
+    rglob discovery picks up `equivariance.json` (sparse k) and
+    `equivariance_dense.json` (dense k grid) for every model, so the figure
+    is multi-architecture: LEMO-PC near the FP32 FFT floor, the FNO/FiLM
+    family well above it. Each curve is mean ± std across (fam, reg, seed)
+    triples that have a value for that shift size.
+    """
+    sparse = _discover_jsons("equivariance.json")
+    dense = _discover_jsons("equivariance_dense.json")
+
+    def _rows_for(model: str):
+        rows = []  # (shift, err)
+        for cells in (sparse.get(model, {}), dense.get(model, {})):
+            for d in cells.values():
+                for key, v in d.items():
+                    m = re.match(r"equiv_shift_(\d+)_mean", key)
+                    if not m or v is None:
+                        continue
+                    try:
+                        rows.append((int(m.group(1)), float(v)))
+                    except (TypeError, ValueError):
+                        continue
+        return rows
+
+    plotted_any = False
+    fig, ax = plt.subplots(figsize=(7.5, 4.0))
+    handles = []
+    for model in MODEL_ORDER:
+        rows = _rows_for(model)
+        if not rows:
             continue
-        for k, v in d.items():
-            m = re.match(r"equiv_shift_(\d+)_mean", k)
-            if m:
-                rows.append((int(m.group(1)), v))
-    if not rows:
+        shifts = sorted(set(r[0] for r in rows))
+        errs_by_shift = {s: [r[1] for r in rows if r[0] == s] for s in shifts}
+        means = np.array([np.mean(errs_by_shift[s]) for s in shifts])
+        stds  = np.array([np.std(errs_by_shift[s])  for s in shifts])
+        color = MODEL_COLOR.get(model, "#888")
+        line = ax.errorbar(shifts, means, yerr=stds, fmt="o-", color=color,
+                            capsize=3, lw=1.3, ms=4,
+                            label=MODEL_LABELS.get(model, model))
+        handles.append(line)
+        plotted_any = True
+    if not plotted_any:
+        plt.close(fig)
         return None
-    fig, ax = plt.subplots(figsize=(6, 3.5))
-    shifts = sorted(set(r[0] for r in rows))
-    errs_by_shift = {s: [r[1] for r in rows if r[0] == s] for s in shifts}
-    means = [np.mean(errs_by_shift[s]) for s in shifts]
-    stds = [np.std(errs_by_shift[s]) for s in shifts]
-    ax.errorbar(shifts, means, yerr=stds, fmt="o-", color="#d62728",
-                 capsize=4, lw=1.5)
-    ax.axhline(1e-3, color="grey", linewidth=0.5, linestyle="--")
-    ax.text(shifts[0], 1.5e-3, "T1 pass threshold (1e-3)", color="grey", fontsize=8)
+    # Cyclic-FFT FP32 round-off floor: relative reconstruction error of a
+    # round-trip cyclic shift on these problem sizes is empirically in the
+    # 1e-3 to 1e-2 range. Annotated as a band, not a "pass/fail" line.
+    ax.axhspan(1e-3, 1e-2, color="grey", alpha=0.12, linewidth=0)
+    ax.text(0.98, 0.02, "FP32 FFT floor",
+             color="dimgrey", fontsize=8, ha="right", va="bottom",
+             style="italic", transform=ax.transAxes)
     ax.set_yscale("log")
-    ax.set_xlabel("cyclic shift size k")
-    ax.set_ylabel(r"$\| \mathrm{LEMO}(\rho_k x) - \rho_k \mathrm{LEMO}(x) \|_2 / \|\mathrm{LEMO}(x)\|_2$")
-    ax.set_title("Cyclic-shift equivariance at deployment (T1 in the wild)")
-    ax.grid(linestyle="--", alpha=0.4)
+    ax.set_xlabel("cyclic shift size $k$")
+    ax.set_ylabel(r"$\| f(\rho_k x) - \rho_k f(x) \|_2 / \|f(x)\|_2$")
+    ax.set_title("Cyclic-shift equivariance error vs shift size, all baselines")
+    ax.legend(loc="best", fontsize=8, frameon=False, ncol=2)
+    ax.grid(linestyle="--", alpha=0.4, which="both")
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
     fig.tight_layout()
     out = FIG_DIR / "F08_equivariance_test.pdf"
     fig.savefig(out)
@@ -563,10 +630,27 @@ def main():
 
     figs = []
     for name, fn, args in [
-        ("F01 headline bar",        fig01_headline_bar,       (stats,)),
-        ("F02 per-family heatmap",  fig02_perfamily_heatmap,  (data,)),
-        ("F03 per-regime box",      fig03_perregime_box,      (data,)),
-        ("F04 effect size",         fig04_effect_size,        (stats,)),
+        # F01 dropped (2026-05-03) — same 4 paired-permutation improvement
+        # numbers as tables/T01_headline_per_baseline.tex; bar chart adds
+        # nothing the table doesn't, plus the title overlap was broken.
+        # ("F01 headline bar",        fig01_headline_bar,       (stats,)),
+        # F02 dropped (2026-05-03) — same data as T02_perfamily_relL2.tex.
+        # Heatmap had a colormap-saturation problem: the LEMO no-FiLM column
+        # (broken checkpoints, ~0.43) pushed vmax so high that the FNO vs
+        # MarkovFNO difference (0.07 vs 0.11) was visually compressed.
+        # T02 carries the per-family numbers without this artifact.
+        # ("F02 per-family heatmap",  fig02_perfamily_heatmap,  (data,)),
+        # F03 dropped (2026-05-03) — replaced by tables/T03_perregime_aggregated.tex.
+        # Per-regime box plot was redundant with the per-regime breakdown table
+        # once F02 was dropped; ranking is regime-stable across clean/lowres/
+        # noisy (per C20 finding too) so the visual axis carries no signal.
+        # ("F03 per-regime box",      fig03_perregime_box,      (data,)),
+        # F04 dropped (2026-05-03) — Hedges-g bar chart had two visual bugs:
+        # (i) the "large (g=0.8)" annotation collides with the title, and
+        # (ii) the vs-LEMO-no-FiLM bar at g=23.43 (from broken checkpoints)
+        # distorts the x-axis so the genuine g=5-6 bars look small. Folded
+        # into tables/T01_headline_per_baseline.tex as a Hedges-g column.
+        # ("F04 effect size",         fig04_effect_size,        (stats,)),
         ("F05 training curves",     fig05_training_curves,    (history_by_model,)),
         ("F06 per-frame rollout",   fig06_perframe_rollout,   ()),
         ("F07 op-norm trajectory",  fig07_op_norm_trajectory, (history_by_model.get("lemo_pc_nd", {}),)),
