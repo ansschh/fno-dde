@@ -166,15 +166,53 @@ def load_baseline_logs(model, layer="dist_kernel_v2_p2", families=FAMS):
     return out
 
 
+def _discover_test_results():
+    """rglob test_results.json across extracted/ and outputs/ for every model
+    in MODEL_LABELS. Returns {model: {(fam, reg, seed): {test_rel_l2, params,
+    wall_seconds}}} with dedup on (model, fam, reg, seed)."""
+    out = {}
+    seen = set()
+    roots = [EXT, REPO / "outputs"]
+    for root in roots:
+        if not Path(root).exists():
+            continue
+        for f in Path(root).rglob("test_results.json"):
+            try:
+                parts = f.parts
+                seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
+            except IndexError:
+                continue
+            if fam not in FAMS or reg not in REGIMES or seed not in SEEDS:
+                continue
+            if model not in MODEL_LABELS:
+                continue
+            key = (model, fam, reg, seed)
+            if key in seen:
+                continue
+            d = _try_json(f)
+            if d is None:
+                continue
+            seen.add(key)
+            row = {
+                "test_rel_l2": float(d.get("test_rel_l2_mean",
+                                           d.get("test_rel_l2", float("nan")))),
+                "params": int(d.get("params", 0)),
+                "wall_seconds": float(d.get("wall_seconds", 0.0)),
+            }
+            out.setdefault(model, {})[(fam, reg, seed)] = row
+    return out
+
+
 def gather_all(layer_p1="dist_kernel_v2_p1", layer_p2="dist_kernel_v2_p2"):
-    return {
-        "lemo_pc_nd":     load_lemo_test("lemo_pc_nd", layer=layer_p1),
-        "lemo_nd":        load_lemo_test("lemo_nd",     layer=layer_p1),
-        "fno_nd":         load_baseline_logs("fno_nd",         layer=layer_p2),
-        "markov_fno_nd":  load_baseline_logs("markov_fno_nd",  layer=layer_p2),
-        "windowed_fno_nd": load_baseline_logs("windowed_fno_nd", layer=layer_p2),
-        "unet_nd":        load_baseline_logs("unet_nd",        layer=layer_p2),
-    }
+    """Return {model: {(fam, reg, seed): row_dict}}.
+
+    rglob discovery picks up every test_results.json under extracted/ or
+    outputs/ for any model in MODEL_LABELS — old layer_p1/p2 layout still
+    covered but new sweep layouts (pod_pulls_2026_05_03_final/<pod>/...)
+    also work. Returns only models that have at least 1 cell.
+    """
+    discovered = _discover_test_results()
+    return {m: cells for m, cells in discovered.items() if cells}
 
 
 def history_for(model="lemo_pc_nd", layer="dist_kernel_v2_p1"):
@@ -623,8 +661,7 @@ def a6_calibration_scatter():
     if not plotted:
         plt.close(fig); return None
     axes[0].set_ylabel("prediction")
-    fig.suptitle("")",
-                  fontsize=12, y=0.98)
+    fig.suptitle("")
     fig.subplots_adjust(top=0.88, bottom=0.13, left=0.05, right=0.99,
                          wspace=0.08)
     out = FIG / "A6_calibration_scatter.pdf"
@@ -1409,7 +1446,6 @@ def c30_single_delay_heatmap():
     cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
     cbar.set_label(r"test rel-$L_2$")
     # title removed
-                 fontsize=11)
     fig.tight_layout()
     out = FIG / "C30_single_delay_heatmap.pdf"
     fig.savefig(out, bbox_inches="tight")
