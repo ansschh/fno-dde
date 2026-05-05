@@ -87,10 +87,12 @@ def main():
             errs.append(num / den)
             left_panels.append(y_shift[0, t_show, ..., chan].cpu().numpy())
             right_panels.append(y_roll[0, t_show, ..., chan].cpu().numpy())
-    # Per-column difference: |LEMO(ρ_k x) - ρ_k LEMO(x)|.
-    # If T1 holds, every panel is near-black (FP32 floor).
-    diff_panels = [np.abs(t - b) for t, b in zip(left_panels, right_panels)]
-    diff_vmax = float(max(max(d.max() for d in diff_panels), 1e-9))
+    # Per-column SIGNED difference: LEMO(ρ_k x) - ρ_k LEMO(x). T1 -> near zero
+    # (FP32 floor). Sign carries information (over- vs under-shoot of T1) so we
+    # render with a diverging RdBu_r colormap matching the V01 error-difference
+    # palette: red = positive deviation, blue = negative deviation, white = 0.
+    diff_panels = [(t - b) for t, b in zip(left_panels, right_panels)]
+    diff_vmax = float(max(max(np.abs(d).max() for d in diff_panels), 1e-9))
     # 32x cubic upsample to match V01 aesthetic.
     from scipy.ndimage import zoom as _zoom
     UPSAMPLE = 32
@@ -102,24 +104,24 @@ def main():
     for j, (k, diff, err) in enumerate(zip(SHIFTS, diff_panels, errs)):
         ax = axes[j]
         d_hi = _zoom(diff, UPSAMPLE, order=3)
-        d_hi = np.clip(d_hi, 0, None)  # avoid bicubic-induced negatives
-        ax.imshow(d_hi, cmap="magma", vmin=0, vmax=diff_vmax,
+        ax.imshow(d_hi, cmap="RdBu_r", vmin=-diff_vmax, vmax=diff_vmax,
                   interpolation="bilinear",
                   extent=[-0.5, diff.shape[1] - 0.5,
                           diff.shape[0] - 0.5, -0.5])
         ax.set_xticks([]); ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_linewidth(0.6)
-        ax.set_title(f"$k = {k}$", fontsize=12)
+        # Per-panel k label inside the panel (no axis title)
+        ax.text(0.5, 0.97, f"$k = {k}$", transform=ax.transAxes,
+                ha="center", va="top", fontsize=11, color="dimgrey")
         ax.text(0.02, 0.98, f"$e_k = {err:.1e}$",
                   transform=ax.transAxes, fontsize=10,
-                  va="top", ha="left", color="white",
-                  bbox=dict(boxstyle="round,pad=0.2", facecolor="black",
-                              alpha=0.6, edgecolor="none"))
-    axes[0].set_ylabel(r"$|\,\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\,|$",
+                  va="top", ha="left", color="black",
+                  bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                              alpha=0.7, edgecolor="none"))
+    axes[0].set_ylabel(r"$\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)$",
                          rotation=90, ha="center", va="center", fontsize=11,
                          labelpad=10)
-    # title removed per user constraint
     out = FIG / "M4_equivariance_demo.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")

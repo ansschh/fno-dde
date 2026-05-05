@@ -513,13 +513,8 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                                                     "hspace": 0.07})
             if n_t == 1:
                 axA = axA.reshape(n_rows_seq, 1)
-            if has_fno_seq:
-                row_labels = ["Ground Truth", "Error Difference"]
-            else:
-                row_labels = ["Ground Truth", "LEMO Error"]
-            for i, lbl in enumerate(row_labels):
-                axA[i, 0].set_ylabel(lbl, fontsize=14, rotation=0,
-                                       ha="right", va="center", labelpad=20)
+            # Row labels removed per user request (no Ground Truth / Error
+            # Difference text on the left margin of V02_rollout_sequence).
             im_gt_a = im_dd_a = None
             for j, (t, lbl) in enumerate(zip(t_abs, t_lbls)):
                 y_gt = y[t, ..., 0]
@@ -546,10 +541,8 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                                     shrink=0.95, aspect=22)
                 cb.ax.tick_params(labelsize=8)
                 cb.set_label(lbl, fontsize=9)
-            figA.suptitle("" if False else f"Rollout: {FAM_LABELS[fam_pick]}  "
-                          f"(hardest sample, $\\ell_2$={l2_hard:.3f})",
-                          fontsize=15, y=0.99)
-            figA.tight_layout(rect=[0, 0, 1, 0.96])
+            # V02 suptitle removed per user request
+            figA.tight_layout(rect=[0, 0, 1, 1])
             out = FIG / "V02_rollout_sequence.pdf"
             figA.savefig(out, bbox_inches="tight")
             figA.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
