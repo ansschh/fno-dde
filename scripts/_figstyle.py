@@ -27,10 +27,9 @@ def apply_style() -> None:
     rc = _mpl.rcParams
     rc["font.family"] = "serif"
     rc["font.serif"] = _TNR_STACK
-    rc["mathtext.fontset"] = "stix"
-    rc["mathtext.rm"] = "Times New Roman"
-    rc["mathtext.it"] = "Times New Roman:italic"
-    rc["mathtext.bf"] = "Times New Roman:bold"
+    # Math text: keep matplotlib's default (Computer Modern via STIX) for
+    # math expressions like rel-L_2. User explicitly asked NOT to change
+    # the math font; only the surrounding body text uses Times New Roman.
     rc["axes.titleweight"] = "normal"
     rc["axes.labelweight"] = "normal"
     rc["pdf.fonttype"] = 42

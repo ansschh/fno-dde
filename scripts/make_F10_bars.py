@@ -135,7 +135,7 @@ def main():
     ax.set_xticklabels([FAM_LETTER[f] for f in FAMS])
     ax.set_yscale("log")
     ax.set_xlabel("trained on family")
-    ax.set_ylabel(r"mean OOD rel-$L_2$")
+    ax.set_ylabel(r"mean OOD rel-$L_2$", fontweight="bold")
     ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)

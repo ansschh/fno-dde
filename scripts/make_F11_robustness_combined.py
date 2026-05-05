@@ -180,17 +180,21 @@ def _plot_panel_single_regime(ax, data, regime, x_label, title):
         means = np.array([np.mean(per_x[x]) for x in xs])
         stds = np.array([np.std(per_x[x]) for x in xs])
         color = MODEL_COLOR.get(model, "#888")
-        line, = ax.plot(xs, means, "o-", color=color, lw=1.5, ms=4,
+        # Smooth solid line, no markers (cleaner look per user feedback).
+        line, = ax.plot(xs, means, "-", color=color, lw=2.0,
                         label=MODEL_LABEL.get(model, model))
         ax.fill_between(xs, means - stds, means + stds,
-                         color=color, alpha=0.15, linewidth=0)
+                         color=color, alpha=0.10, linewidth=0)
         handles.append(line)
     ax.set_yscale("log")
     ax.set_xlabel(x_label)
     if title:
-        ax.text(0.5, 0.97, title, transform=ax.transAxes,
-                ha="center", va="top", fontsize=10, color="dimgrey")
+        ax.set_title(title, color="dimgrey", pad=8)
     ax.grid(False)
+    # Drop minor ticks and reduce major-tick density.
+    ax.minorticks_off()
+    ax.tick_params(axis="x", which="both", top=False)
+    ax.tick_params(axis="y", which="both", right=False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     return handles
@@ -201,32 +205,36 @@ def make_main(data_fgsm, data_noise):
     Regime-independence is established empirically and shown in the appendix
     figure; the main figure focuses on the FGSM-vs-Gaussian contrast.
     """
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.6))
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(14.0, 6.4))
     hL = _plot_panel_single_regime(axL, data_fgsm, "clean",
                                     r"FGSM perturbation $\varepsilon$", "")
     hR = _plot_panel_single_regime(axR, data_noise, "clean",
                                     r"Gaussian noise std $\sigma$", "")
-    axL.set_ylabel(r"test rel$L_2$")
-    axR.set_ylabel(r"test rel$L_2$")
+    axL.set_ylabel(r"test rel-$L_2$")
+    axR.set_ylabel(r"test rel-$L_2$")
     seen = set(); shared = []
     for h in hL + hR:
         if h.get_label() not in seen:
             seen.add(h.get_label()); shared.append(h)
+    n = len(shared)
+    ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
     fig.legend(handles=shared, loc="lower center",
-               bbox_to_anchor=(0.5, -0.04),
-               ncol=len(shared), frameon=False, fontsize=7.5,
-               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.tight_layout(rect=[0, 0.08, 1, 1])
+               bbox_to_anchor=(0.5, 0.0),
+               ncol=ncol, frameon=False,
+               columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
+    rows = int(np.ceil(n / ncol))
+    bot = 0.10 + 0.05 * rows
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.96, bottom=bot, wspace=0.22)
     out = FIG_DIR / "F11_robustness.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(out, dpi=150)
+    fig.savefig(out.with_suffix(".pdf"))
     plt.close(fig)
     return out
 
 
 def make_appendix(data_fgsm, data_noise):
     """2×3 appendix version: regimes as columns, perturbation type as rows."""
-    fig, axes = plt.subplots(2, 3, figsize=(14.5, 7.6),
+    fig, axes = plt.subplots(2, 3, figsize=(18.0, 9.6),
                               sharey="row", sharex="row")
     handles_all = {}
     for j, reg in enumerate(REGIMES):
@@ -238,31 +246,27 @@ def make_appendix(data_fgsm, data_noise):
                                         "")
         for h in h1 + h2:
             handles_all.setdefault(h.get_label(), h)
-    axes[0, 0].set_ylabel("Worst-case (FGSM)\n" + r"test rel$L_2$",
-                          fontsize=10, fontweight="normal",
-                          fontfamily="serif", fontname="Times New Roman")
-    axes[1, 0].set_ylabel("Average-case (Gaussian)\n" + r"test rel$L_2$",
-                          fontsize=10, fontweight="normal",
-                          fontfamily="serif", fontname="Times New Roman")
+    axes[0, 0].set_ylabel("Worst-case (FGSM)\n" + r"test rel-$L_2$")
+    axes[1, 0].set_ylabel("Average-case (Gaussian)\n" + r"test rel-$L_2$")
     for j in range(3):
         axes[0, j].set_xlabel("")
         axes[1, j].set_xlabel("")
-    axes[0, 1].annotate(r"FGSM perturbation $\varepsilon$",
-                          xy=(0.5, -0.18), xycoords="axes fraction",
-                          ha="center", fontsize=10, color="black",
-                          fontfamily="serif", fontname="Times New Roman")
-    axes[1, 1].annotate(r"Gaussian noise std $\sigma$",
-                          xy=(0.5, -0.18), xycoords="axes fraction",
-                          ha="center", fontsize=10, color="black",
-                          fontfamily="serif", fontname="Times New Roman")
-    fig.legend(handles=list(handles_all.values()),
-               loc="lower center", bbox_to_anchor=(0.5, -0.03),
-               ncol=len(handles_all), frameon=False, fontsize=7.5,
-               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.tight_layout(rect=[0, 0.07, 1, 1])
+    axes[0, 1].set_xlabel(r"FGSM perturbation $\varepsilon$")
+    axes[1, 1].set_xlabel(r"Gaussian noise std $\sigma$")
+    handles_list = list(handles_all.values())
+    n = len(handles_list)
+    ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
+    fig.legend(handles=handles_list,
+               loc="lower center", bbox_to_anchor=(0.5, 0.0),
+               ncol=ncol, frameon=False,
+               columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
+    rows = int(np.ceil(n / ncol))
+    bot = 0.05 + 0.045 * rows
+    fig.subplots_adjust(left=0.06, right=0.98, top=0.95, bottom=bot,
+                          hspace=0.30, wspace=0.10)
     out = FIG_DIR / "F11_robustness_appendix.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(out, dpi=150)
+    fig.savefig(out.with_suffix(".pdf"))
     plt.close(fig)
     return out
 
