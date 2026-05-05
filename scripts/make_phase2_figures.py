@@ -723,10 +723,16 @@ def a7_residual_histogram():
     """
     # Drop LEMO (no-FiLM) — its checkpoints are broken (rel-L2 near 1.0
     # = failed predictions), would dominate x-range without saying anything
-    # the FiLM-ablation table doesn't already cover.
-    candidate_models = ["lemo_pc_nd", "fno_film_nd", "fno_nd",
-                         "markov_fno_nd", "windowed_fno_nd", "memno_nd",
-                         "ffno_nd", "unet_nd"]
+    # the FiLM-ablation table doesn't already cover. All other architectures
+    # with residuals.npz coverage on dist_*_rd_2d are included.
+    candidate_models = [
+        "lemo_pc_nd", "causal_smooth_lemo_pc_nd", "lemo_bcorrect_nd",
+        "fno_film_nd", "noneq_film_nd",
+        "fno_nd", "markov_fno_nd", "windowed_fno_nd",
+        "memno_nd", "ffno_nd",
+        "s4_nd", "nide_nd", "ndde_nd",
+        "unet_nd",
+    ]
     # Compute pooled per-(model, family) arrays first, then plot.
     pooled = {m: _residuals_for_model_any_layer(m) for m in candidate_models}
     active_models = [m for m in candidate_models
@@ -1243,6 +1249,14 @@ def c22_film_gamma_beta_heatmap():
         g, b = _compute_film_per_family(fam_to_snap[fam], 0, fam_to_params[fam])
         gammas[fam] = g.mean(axis=0)
         betas[fam] = b.mean(axis=0)
+    # Use signed-sqrt diverging norm so small modulations are visible (most
+    # γ/β cells are tiny relative to a few sparse spikes — under linear
+    # RdBu_r the bulk of the heatmap appeared near-white).
+    from matplotlib.colors import FuncNorm
+    def _ssqrt_norm(vmax):
+        fwd = lambda x: np.sign(x) * np.power(np.abs(x), 0.5)
+        inv = lambda x: np.sign(x) * np.power(np.abs(x), 2.0)
+        return FuncNorm((fwd, inv), vmin=-vmax, vmax=vmax)
     g_max = max(np.abs(v).max() for v in gammas.values())
     b_max = max(np.abs(v).max() for v in betas.values())
     n = len(fams_present)
@@ -1250,19 +1264,19 @@ def c22_film_gamma_beta_heatmap():
                               sharex=True, sharey=True)
     if n == 1:
         axes = np.array([[axes[0]], [axes[1]]])
+    norm_g = _ssqrt_norm(g_max)
+    norm_b = _ssqrt_norm(b_max)
     for j, fam in enumerate(fams_present):
         ax_g = axes[0, j]; ax_b = axes[1, j]
-        ax_g.imshow(gammas[fam], cmap="RdBu_r", vmin=-g_max, vmax=g_max, aspect="auto")
-        ax_b.imshow(betas[fam],  cmap="RdBu_r", vmin=-b_max, vmax=b_max, aspect="auto")
+        ax_g.imshow(gammas[fam], cmap="RdBu_r", norm=norm_g, aspect="auto")
+        ax_b.imshow(betas[fam],  cmap="RdBu_r", norm=norm_b, aspect="auto")
         ax_g.set_title(FAM_LABELS[fam], fontsize=10, pad=3)
         if j == 0:
             ax_g.set_ylabel(r"$\gamma$ (mult.)" + "\nout channel", fontsize=9)
             ax_b.set_ylabel(r"$\beta$ (add.)" + "\nout channel", fontsize=9)
         ax_b.set_xlabel(r"lag mode $m$", fontsize=9)
-    sm_g = plt.cm.ScalarMappable(cmap="RdBu_r",
-                                  norm=plt.Normalize(vmin=-g_max, vmax=g_max))
-    sm_b = plt.cm.ScalarMappable(cmap="RdBu_r",
-                                  norm=plt.Normalize(vmin=-b_max, vmax=b_max))
+    sm_g = plt.cm.ScalarMappable(cmap="RdBu_r", norm=norm_g)
+    sm_b = plt.cm.ScalarMappable(cmap="RdBu_r", norm=norm_b)
     cb_g = fig.add_axes([0.965, 0.555, 0.012, 0.32])
     cb_b = fig.add_axes([0.965, 0.135, 0.012, 0.32])
     fig.colorbar(sm_g, cax=cb_g).ax.tick_params(labelsize=7)
