@@ -397,12 +397,16 @@ def fig05_training_curves(history_by_model: dict):
         plt.close(fig)
         return None
     axes[0].set_ylabel(r"Validation rel$L_2$")
+    # User constraint: clip x-axis to first 100 epochs.
+    for ax in axes:
+        if ax.get_visible():
+            ax.set_xlim(left=1, right=100)
     if handles:
         fig.legend(handles, labels, loc="lower center",
-                    bbox_to_anchor=(0.5, -0.02),
-                    ncol=min(len(handles), 7), frameon=False, fontsize=9)
-    fig.suptitle("Validation rel$L_2$ vs epoch (mean over seeds, clean regime, all baselines)")
-    fig.tight_layout(rect=[0, 0.04, 1, 1])
+                    bbox_to_anchor=(0.5, -0.04),
+                    ncol=len(handles), frameon=False, fontsize=7.5,
+                    columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
     out = FIG_DIR / "F05_training_curves.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
@@ -426,11 +430,19 @@ def fig06_perframe_rollout():
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
+    # Strip leading "history" zeros: rel_l2_per_step pads the history portion
+    # with zeros for compatibility with the per-frame plot. Find the first
+    # non-zero index across ALL curves and offset the x-axis to "future
+    # rollout step" = step - first_nonzero so t=0 is the first prediction.
+    def _first_nonzero(arr: np.ndarray, eps: float = 1e-6) -> int:
+        nz = np.nonzero(arr > eps)[0]
+        return int(nz[0]) if len(nz) else 0
+
     handles, labels_seen = [], []
     plotted_any = False
     for ax, fam in zip(axes, FAMS):
         plotted_in_panel = False
-        # Per-model curves (clean regime)
+        # Per-model curves (clean regime). Truncate every curve at first non-zero.
         for model in MODEL_ORDER:
             cells = perframe.get(model, {})
             curves = []
@@ -440,7 +452,9 @@ def fig06_perframe_rollout():
                     continue
                 r = d.get("rel_l2_per_step", [])
                 if r:
-                    curves.append(np.array(r))
+                    arr = np.asarray(r, dtype=float)
+                    cut = _first_nonzero(arr)
+                    curves.append(arr[cut:])
             if not curves:
                 continue
             L = min(len(c) for c in curves)
@@ -461,7 +475,7 @@ def fig06_perframe_rollout():
             plotted_any = True
         # Naive baseline: pull from any model's per_frame.json (the naive
         # "copy last frame" curve does not depend on model architecture, so
-        # we dedupe by (fam, seed) across all models).
+        # we dedupe by (fam, seed) across all models). Same zero-strip.
         naive_curves = []
         seen_naive = set()
         for model in MODEL_ORDER:
@@ -474,7 +488,9 @@ def fig06_perframe_rollout():
                     continue
                 n = d.get("naive_rel_l2_per_step", [])
                 if n:
-                    naive_curves.append(np.array(n))
+                    arr = np.asarray(n, dtype=float)
+                    cut = _first_nonzero(arr)
+                    naive_curves.append(arr[cut:])
                     seen_naive.add((fam, seed))
         if naive_curves:
             L = min(len(c) for c in naive_curves)
@@ -489,8 +505,9 @@ def fig06_perframe_rollout():
             ax.set_visible(False)
             continue
         ax.set_yscale("log")
-        ax.set_xlabel("rollout step t")
-        ax.set_title(FAM_LABELS[fam])
+        ax.set_xlabel("future rollout step $t$")
+        ax.text(0.5, 0.97, FAM_LABELS[fam], transform=ax.transAxes,
+                ha="center", va="top", fontsize=10, color="dimgrey")
         ax.grid(linestyle="--", alpha=0.4)
     if not plotted_any:
         plt.close(fig)
@@ -498,10 +515,10 @@ def fig06_perframe_rollout():
     axes[0].set_ylabel(r"per-step rel$L_2$")
     if handles:
         fig.legend(handles, labels_seen, loc="lower center",
-                    bbox_to_anchor=(0.5, -0.02),
-                    ncol=min(len(handles), 7), frameon=False, fontsize=9)
-    fig.suptitle(r"Per-rollout-step rel$L_2$ (clean regime, mean over seeds, all baselines)")
-    fig.tight_layout(rect=[0, 0.04, 1, 1])
+                    bbox_to_anchor=(0.5, -0.04),
+                    ncol=len(handles), frameon=False, fontsize=7.5,
+                    columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
+    fig.tight_layout(rect=[0, 0.06, 1, 1])
     out = FIG_DIR / "F06_perframe_rollout.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)

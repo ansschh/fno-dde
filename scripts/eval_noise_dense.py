@@ -89,12 +89,15 @@ def evaluate_checkpoint(ckpt_path: Path, data_dir: str, sigmas, device, n_batche
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--roots", nargs="+", required=True)
+    ap.add_argument("--roots", nargs="*", default=None,
+                    help="Sweep roots to crawl. Required unless --shard given.")
+    ap.add_argument("--shard", default=None,
+                    help="Optional newline-separated list of best_model.pt paths.")
     ap.add_argument("--data_dir", default="data_dde_pde")
     ap.add_argument("--sigmas", default=DENSE_SIGMA_DEFAULT)
     ap.add_argument("--families", default=None)
     ap.add_argument("--models", default=None)
-    ap.add_argument("--regimes", default="clean")
+    ap.add_argument("--regimes", default="clean,lowres,noisy")
     ap.add_argument("--n_batches", type=int, default=16)
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
@@ -107,10 +110,17 @@ def main():
     print(f"[noise-dense] device={device} sigmas={sigmas} regimes={regimes_filter}")
 
     ckpts = []
-    for root in args.roots:
-        rp = Path(root)
-        ckpts.extend(sorted(rp.glob("raw/**/best_model.pt")))
-    print(f"[noise-dense] found {len(ckpts)} candidate checkpoints across {len(args.roots)} roots")
+    if args.shard:
+        ckpts = [Path(p) for p in Path(args.shard).read_text().splitlines() if p.strip()]
+        print(f"[noise-dense] using shard with {len(ckpts)} checkpoints from {args.shard}")
+    else:
+        if not args.roots:
+            print("[noise-dense] ERROR: must provide --roots or --shard")
+            return
+        for root in args.roots:
+            rp = Path(root)
+            ckpts.extend(sorted(rp.rglob("best_model.pt")))
+        print(f"[noise-dense] found {len(ckpts)} candidate checkpoints across {len(args.roots)} roots")
 
     n_total = n_skipped = n_done = n_failed = 0
     t0 = time.time()

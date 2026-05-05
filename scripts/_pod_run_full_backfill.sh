@@ -68,14 +68,20 @@ exec >> "$LOG" 2>&1
 cd /workspace/dde-fno
 export CUDA_VISIBLE_DEVICES=$g
 
-echo "[gpu $g] === step1: unified worker ===" "\$(date -u +%H:%M:%S)"
-python3 scripts/_pod_unified_worker.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 || echo "[gpu $g] step1 failed (continuing)"
+echo "[gpu $g] === step1: cross_family ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_cross_family.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 --n_batches 8 || echo "[gpu $g] step1 failed (continuing)"
 
-echo "[gpu $g] === step2: cross_family ===" "\$(date -u +%H:%M:%S)"
-python3 scripts/eval_cross_family.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 --n_batches 8 || echo "[gpu $g] step2 failed (continuing)"
+echo "[gpu $g] === step2: adversarial_dense ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_adversarial_dense.py --shard "$SHARD" --data_dir "$DATA_DIR" --n_batches 8 || echo "[gpu $g] step2 failed (continuing)"
 
-echo "[gpu $g] === step3: long_horizon ===" "\$(date -u +%H:%M:%S)"
-python3 scripts/eval_long_horizon.py --shard "$SHARD" --data_dir "$DATA_DIR" || echo "[gpu $g] step3 failed (continuing)"
+echo "[gpu $g] === step3: noise_dense ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_noise_dense.py --shard "$SHARD" --data_dir "$DATA_DIR" --n_batches 8 || echo "[gpu $g] step3 failed (continuing)"
+
+echo "[gpu $g] === step4: long_horizon ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_long_horizon.py --shard "$SHARD" --data_dir "$DATA_DIR" || echo "[gpu $g] step4 failed (continuing)"
+
+echo "[gpu $g] === step5: equivariance_dense (only if missing) ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/_pod_unified_worker.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 --steps lipschitz,equivariance || echo "[gpu $g] step5 failed (continuing)"
 
 echo "[gpu $g] DONE" "\$(date -u +%H:%M:%S)"
 RUNNEREOF
