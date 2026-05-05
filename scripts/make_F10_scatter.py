@@ -36,6 +36,7 @@ MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
     "lemo_nd":                    "#ff7f0e",
     "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "lemo_bcorrect_nd":           "#bcbd22",
     "fno_nd":                     "#1f77b4",
     "fno_film_nd":                "#17becf",
     "noneq_film_nd":              "#c5b0d5",
@@ -52,6 +53,7 @@ MODEL_LABEL = {
     "lemo_pc_nd":                 "LEMO-PC",
     "lemo_nd":                    "LEMO",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
+    "lemo_bcorrect_nd":           "LEMO (b-correct)",
     "fno_nd":                     "FNO",
     "fno_film_nd":                "FNO+FiLM",
     "noneq_film_nd":              "Non-equiv +FiLM",
@@ -67,14 +69,20 @@ MODEL_LABEL = {
 
 
 def collect(regime: str):
-    """Returns nested dict: out[model][train_family] = list of (in_dist, ood_mean) tuples."""
+    """Returns nested dict: out[model][train_family] = list of (in_dist, ood_mean) tuples.
+
+    rglob discovery across the broader extracted/ + outputs/ trees so every
+    sweep layout (pod_pulls_2026_05_03_final/<pod>/outputs/<sweep>/raw/...,
+    film_ablation_caltech/raw, dist_kernel_v2_p1/raw, etc.) is covered.
+    Dedupes on (model, fam, regime, seed) to avoid double-count when the
+    same cell appears under both extracted/ and outputs/.
+    """
     out = defaultdict(lambda: defaultdict(list))
-    roots = [
-        REPO / "extracted" / "pod1" / "outputs",
-        REPO / "outputs",
-        REPO / "extracted" / "pod3" / "outputs",
-    ]
+    seen = set()
+    roots = [REPO / "extracted", REPO / "outputs"]
     for root in roots:
+        if not root.exists():
+            continue
         for f in root.rglob("cross_family_relL2.json"):
             parts = f.parts
             try:
@@ -85,6 +93,12 @@ def collect(regime: str):
                 continue
             if ck_fam not in FAMS:
                 continue
+            if model not in MODEL_LABEL:
+                continue
+            key = (model, ck_fam, reg, seed)
+            if key in seen:
+                continue
+            seen.add(key)
             try:
                 j = json.loads(f.read_text())
             except Exception:
