@@ -38,9 +38,26 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 FIG = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG.mkdir(parents=True, exist_ok=True)
-_LOCAL_EXTRACT = REPO / "extracted_lemo_pc" / "outputs" / "dist_kernel_v2_p1" / "raw"
-_REMOTE_OUTPUT = REPO / "outputs" / "dist_kernel_v2_p1" / "raw"
-BASE = _LOCAL_EXTRACT if _LOCAL_EXTRACT.exists() else _REMOTE_OUTPUT
+# Checkpoint roots: prefer the most recent (8-channel inputs from data_dde_pde),
+# fall back to legacy 6-channel snapshot for compatibility.
+_BASE_CANDIDATES = [
+    REPO / "extracted" / "244_FULL_pull" / "workspace" / "dde-fno" / "extracted"
+        / "pod1" / "outputs" / "dist_kernel_v2_p1" / "raw",
+    REPO / "outputs" / "dist_kernel_v2_p1" / "raw",
+    REPO / "extracted_lemo_pc" / "outputs" / "dist_kernel_v2_p1" / "raw",
+]
+BASE = next((p for p in _BASE_CANDIDATES if p.exists()), _BASE_CANDIDATES[-1])
+
+# Data directory: prefer local data_dde_pde, fall back to extracted bundles.
+_LOCAL_DATA = REPO / "data_dde_pde"
+_EXT_DATA_CANDIDATES = [
+    REPO / "extracted" / "244_FULL_pull" / "workspace" / "dde-fno" / "data_dde_pde",
+    REPO / "extracted" / "full_pulls" / "227" / "workspace" / "dde-fno" / "data_dde_pde",
+    REPO / "extracted" / "full_pulls" / "154" / "workspace" / "dde-fno" / "data_dde_pde",
+]
+DATA_DIR = str(_LOCAL_DATA) if (_LOCAL_DATA / "dist_exp_rd_2d").exists() else next(
+    (str(p) for p in _EXT_DATA_CANDIDATES if (p / "dist_exp_rd_2d").exists()),
+    "data_dde_pde")
 
 SHIFTS = (0, 4, 16, 32)
 FAM = "dist_exp_rd_2d"
@@ -62,7 +79,7 @@ def main():
     noise_std = float(cfg.get("noise_std", 0.05))
     downsample_factor = int(cfg.get("downsample_factor", 2))
     _, _, test_loader = create_apebench_dataloaders(
-        "data_dde_pde", FAM, batch_size=1,
+        DATA_DIR, FAM, batch_size=1,
         regime=regime, noise_std=noise_std, downsample_factor=downsample_factor,
         residual_anchor=ra, seed=42)
     sample = next(iter(test_loader))
