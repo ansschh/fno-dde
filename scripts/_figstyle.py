@@ -34,16 +34,23 @@ def apply_style() -> None:
     rc["axes.labelweight"] = "normal"
     rc["pdf.fonttype"] = 42
     rc["ps.fonttype"] = 42
-    # Doubled-from-default font sizes for paper-ready consistency.
-    # matplotlib defaults: font.size=10, axes.titlesize/labelsize=10, ticks=10,
-    # legend=10. Doubled to 18-20 for camera-ready legibility.
-    rc["font.size"] = 18
-    rc["axes.titlesize"] = 20
-    rc["axes.labelsize"] = 18
-    rc["xtick.labelsize"] = 16
-    rc["ytick.labelsize"] = 16
-    rc["legend.fontsize"] = 18
-    rc["figure.titlesize"] = 22
+    # Camera-ready font sizes — bumped per user feedback for legibility.
+    # All text is black (no dimgrey/grey body text); bigger so labels never
+    # collide with each other.
+    rc["font.size"] = 22
+    rc["axes.titlesize"] = 24
+    rc["axes.labelsize"] = 22
+    rc["xtick.labelsize"] = 20
+    rc["ytick.labelsize"] = 20
+    rc["legend.fontsize"] = 20
+    rc["figure.titlesize"] = 26
+    # Default text colors — black everywhere unless explicitly overridden.
+    rc["text.color"] = "black"
+    rc["axes.labelcolor"] = "black"
+    rc["xtick.color"] = "black"
+    rc["ytick.color"] = "black"
+    rc["axes.titlecolor"] = "black"
+    rc["axes.edgecolor"] = "black"
 
 
 apply_style()

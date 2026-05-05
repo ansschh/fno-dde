@@ -125,7 +125,7 @@ def _plot_panel(ax, data, mode, title):
         plotted = True
     if title:
         ax.text(0.5, 0.97, title, transform=ax.transAxes,
-                ha="center", va="top", fontsize=18, color="dimgrey")
+                ha="center", va="top", fontsize=18, color="black")
     ax.set_yscale("log")
     ax.set_xlabel("trained on family")
     ax.grid(False)

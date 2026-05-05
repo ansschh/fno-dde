@@ -1,4 +1,4 @@
-"""Visual figures (V-series) — actual PDE field visualizations.
+﻿"""Visual figures (V-series) â€” actual PDE field visualizations.
 
 Replaces the numbers-only F01/F02/F04 charts (data already in T01/T02
 tables).  Builds NO-paper-Figure-4-style field viz from `viz_samples.npz`
@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm, LinearSegmentedColormap, FuncNorm
 
 # Use matplotlib's standard RdBu_r diverging colormap. Bold saturated reds and
-# blues at extremes, white at zero — gives the strongest contrast for error/diff
+# blues at extremes, white at zero â€” gives the strongest contrast for error/diff
 # visualisation and matches the bolder pre-pastel iteration.
 PASTEL_DIV = "RdBu_r"
 import numpy as np
@@ -149,20 +149,20 @@ def load_viz_fno(fam, regime="clean", seed="s42"):
 
 def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                               sample_idx: int = 0):
-    """Per-family field viz — generates two variants:
+    """Per-family field viz â€” generates two variants:
 
-      V01_family_triptych.{pdf,png}      3 rows × N cols
+      V01_family_triptych.{pdf,png}      3 rows Ã— N cols
         rows = [GT, LEMO-PC pred, FNO+FiLM pred]; each cell is the field as
         a heatmap with GT iso-contours overlaid (so you can see where each
         prediction tracks the GT structure).
 
-      V01_family_triptych_diff.{pdf,png} 3 rows × N cols
+      V01_family_triptych_diff.{pdf,png} 3 rows Ã— N cols
         rows = [LEMO-PC pred, FNO+FiLM pred, signed error |LEMO err| - |FNO err|]
         bottom row = where LEMO beats FNO (negative, blue) vs where FNO beats
         LEMO (positive, red). GT iso-contours overlaid on bottom row.
 
     Background: high-fidelity RdBu_r diverging colormap (matches the localNO
-    aesthetic). 32× cubic-spline upsample of the 64×64 field (2048×2048
+    aesthetic). 32Ã— cubic-spline upsample of the 64Ã—64 field (2048Ã—2048
     source per panel) for the very-fine-grained look.
     """
     from scipy.ndimage import zoom
@@ -213,7 +213,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                         cbar_n_ticks=3):
         """Upsampled imshow of `field`. scale in {'linear', 'mild', 'sqrt', 'symlog'}.
         If add_cbar, attaches a sibling colorbar axes via make_axes_locatable
-        (renders identically in PNG and PDF — no inset clipping issues)."""
+        (renders identically in PNG and PDF â€” no inset clipping issues)."""
         f_hi = zoom(field, UPSAMPLE, order=3)
         H, W = field.shape
         v = vmax * headroom
@@ -295,7 +295,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                     sp.set_linewidth(0.6)
                 axes[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
                                   transform=axes[2, j].transAxes,
-                                  color="dimgrey", fontsize=12)
+                                  color="black", fontsize=12)
 
     fig.suptitle("",
                  fontsize=16, y=0.99)
@@ -305,7 +305,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
     fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # ----- Variant B: GT / LEMO Error / Err Diff (3 rows × N cols) -----
+    # ----- Variant B: GT / LEMO Error / Err Diff (3 rows Ã— N cols) -----
     # SHARED per-row vmax + one per-row colorbar. Mild gamma=0.7 power norm
     # amplifies small-error families so they're not washed out.
     gt_vmax = float(max(max(np.abs(p[1]).max() for p in panels), 1e-9))
@@ -347,7 +347,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                     sp.set_linewidth(0.6)
                 axes2[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
                                    transform=axes2[2, j].transAxes,
-                                   color="dimgrey", fontsize=12)
+                                   color="black", fontsize=12)
     # Per-row colorbars (no labels per user request).
     cb_rows = [(axes2[0, -1], im_gt),
                 (axes2[1, -1], im_le)]
@@ -375,13 +375,13 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     """V02 rollout-sequence figures (two outputs):
 
       V02_rollout_sequence.{pdf,png}
-        Option A — 2 rows × 5 cols on a single family (default Gauss = LEMO's
+        Option A â€” 2 rows Ã— 5 cols on a single family (default Gauss = LEMO's
         hardest family per T01). Top row = GT, bottom row = Error Difference
-        (|LEMO err| − |FNO err|). Aesthetic matches V01_diff (RdBu_r, 32×
+        (|LEMO err| âˆ’ |FNO err|). Aesthetic matches V01_diff (RdBu_r, 32Ã—
         cubic-spline upsample, GT iso-contours with white halo).
 
       V02_rollout_grid.{pdf,png}
-        Option B — 5 rows (family) × 5 cols (timestep) of Error Difference.
+        Option B â€” 5 rows (family) Ã— 5 cols (timestep) of Error Difference.
         Covers all families in one shot; no cherry-picking. Each cell is a
         compact heatmap; consistent diff_vmax across cells of the same family.
     """
@@ -392,7 +392,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
 
     # Pre-load all 5 families (LEMO + FNO+FiLM) so both A and B have data.
     # For each family pick the HARDEST sample (highest LEMO-PC relL2 against GT
-    # at the final forecast step) — same worst-case framing as V01_diff.
+    # at the final forecast step) â€” same worst-case framing as V01_diff.
     fam_data = {}
     for fam in FAMS:
         dl = load_viz(fam)
@@ -477,7 +477,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 c.set_path_effects([halo])
 
     # ====================================================================
-    # Option A: single family (Gauss by default), 2 rows × 5 cols
+    # Option A: single family (Gauss by default), 2 rows Ã— 5 cols
     # ====================================================================
     if fam_pick in fam_data:
         y, yhat_l, yhat_f, t_abs, t_lbls, l2_hard = fam_data[fam_pick]
@@ -527,8 +527,8 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 if j == n_t - 1: im_dd_a = im
                 _overlay_gt_contours(axA[1, j], y_gt,
                                        dd_vmax_seq if has_fno_seq else le_vmax_seq)
-            cb_lbl1 = ("|LEMO err| − |FNO err|" if has_fno_seq
-                        else "LEMO err (pred − GT)")
+            cb_lbl1 = ("|LEMO err| âˆ’ |FNO err|" if has_fno_seq
+                        else "LEMO err (pred âˆ’ GT)")
             for row_idx, im_row, lbl in [(0, im_gt_a, "field"),
                                           (1, im_dd_a, cb_lbl1)]:
                 if im_row is None: continue
@@ -545,7 +545,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
             plt.close(figA)
 
     # ====================================================================
-    # Option B: 5 families × 5 timesteps grid of Error Difference only
+    # Option B: 5 families Ã— 5 timesteps grid of Error Difference only
     # ====================================================================
     fams_with_both = [f for f in FAMS
                        if f in fam_data and fam_data[f][2] is not None
@@ -579,7 +579,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0], cell_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
                                    ha="right", va="center", labelpad=12)
-        figB.suptitle("Error Difference grid (rollout × family)",
+        figB.suptitle("Error Difference grid (rollout Ã— family)",
                        fontsize=16, y=0.995)
         figB.tight_layout(rect=[0, 0, 1, 0.97])
         outB = FIG / "V02_rollout_grid.pdf"
@@ -631,12 +631,12 @@ def fig_v04_spectral_kernel(fam_pick="dist_exp_rd_2d"):
 
     Shows the LEMO-PC learned spectral lag kernel.  Two heatmaps:
       LEFT:   per-mode operator norm sigma_max(K[:,:,m])  vs m  (line plot)
-      RIGHT:  |K|_F per mode m, broken down by in→out channel (small heatmap)
+      RIGHT:  |K|_F per mode m, broken down by inâ†’out channel (small heatmap)
     """
     d = load_kernel(fam_pick)
     if d is None:
         return None
-    # Kernel is stored as cfloat → split into 'weights__re' and 'weights__im'.
+    # Kernel is stored as cfloat â†’ split into 'weights__re' and 'weights__im'.
     keys = list(d.keys())
     re_keys = [k for k in keys if k.endswith("__re") and "weights" in k and "film" not in k]
     if not re_keys:
@@ -766,10 +766,10 @@ def fig_v05_kernel_recovery():
 def fig_v06_residual_fft():
     """V06: 2-panel residual spectrum + cumulative-energy truncation justification.
 
-    Left panel: per-mode residual FFT energy E[|r̂_m|²] across 5 families.
+    Left panel: per-mode residual FFT energy E[|rÌ‚_m|Â²] across 5 families.
     Right panel: cumulative fraction of residual energy captured by first M modes,
     with a vertical line at the architectural truncation M=24. Annotations are
-    deliberately minimal — paper text / latex caption fills in the M=24 numeric.
+    deliberately minimal â€” paper text / latex caption fills in the M=24 numeric.
     """
     series = {}
     for fam in FAMS:
@@ -810,7 +810,7 @@ def fig_v06_residual_fft():
     axL.grid(linestyle=":", alpha=0.5, which="both")
     for sp in ("top", "right"): axL.spines[sp].set_visible(False)
 
-    axR.axvline(24, color="dimgrey", linestyle="--", lw=1.0, alpha=0.7)
+    axR.axvline(24, color="black", linestyle="--", lw=1.0, alpha=0.7)
     axR.set_xlabel("modes retained $M$")
     axR.set_ylabel("% of total residual energy")
     axR.set_title("Cumulative energy capture", fontsize=11)
@@ -843,7 +843,7 @@ def main():
         ("V02 rollout sequence",    fig_v02_rollout_sequence),
         # V03 dropped: signed LEMO error is now row 2 of V01_family_triptych_diff.
         # V04 dropped: not referenced in paper; redundant with V05 (kernel
-        # recovery) for kernel structure and F07 (op-norm trajectory) for σ-bound.
+        # recovery) for kernel structure and F07 (op-norm trajectory) for Ïƒ-bound.
         # V05 dropped (2026-05-03): the dominant-pair aggregation fix exposed
         # that LEMO-PC's current learned kernel is bimodal/mode-2 due to FiLM
         # nullification, making the kernel-recovery story look weaker than it

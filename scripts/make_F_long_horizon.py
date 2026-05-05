@@ -1,4 +1,4 @@
-"""F_long_horizon — rollout error vs horizon, extended past training T=64.
+﻿"""F_long_horizon â€” rollout error vs horizon, extended past training T=64.
 
 Two-panel figure:
   Left:  per-step rel-L2 over t in [0, T_short=64] using `per_frame.json`
@@ -40,7 +40,7 @@ SEEDS = ["s42", "s123", "s456"]
 MODEL_LABELS = {
     "lemo_pc_nd":                 "LEMO-PC",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
-    "lemo_bcorrect_nd":           "LEMO (no σ)",
+    "lemo_bcorrect_nd":           "LEMO (no Ïƒ)",
     "fno_nd":                     "FNO",
     "fno_film_nd":                "FNO+FiLM",
     "noneq_film_nd":              "Non-equiv +FiLM",
@@ -188,7 +188,7 @@ def main():
     else:
         axR.text(0.5, 0.5, "(no long_horizon.json data)",
                   transform=axR.transAxes, ha="center", va="center",
-                  fontsize=12, color="dimgrey")
+                  fontsize=12, color="black")
     axR.grid(axis="y", linestyle=":", alpha=0.4)
     for sp in ("top", "right"):
         axR.spines[sp].set_visible(False)

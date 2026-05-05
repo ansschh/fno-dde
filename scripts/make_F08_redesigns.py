@@ -181,7 +181,7 @@ def f08a_filled_band(per_model):
     # FP32 floor band.
     ax.axhspan(1e-7, 1e-6, color="grey", alpha=0.12, linewidth=0)
     ax.text(0.985, 0.03, "FP32 FFT floor",
-             color="dimgrey", fontsize=14, ha="right", va="bottom",
+             color="black", fontsize=14, ha="right", va="bottom",
              style="italic", transform=ax.transAxes)
 
     ax.set_yscale("log")
@@ -222,7 +222,7 @@ def f08b_lines_clean(per_model):
         handles.append(line)
     ax.axhspan(1e-7, 1e-6, color="grey", alpha=0.12, linewidth=0)
     ax.text(0.985, 0.03, "FP32 FFT floor",
-             color="dimgrey", fontsize=14, ha="right", va="bottom",
+             color="black", fontsize=14, ha="right", va="bottom",
              style="italic", transform=ax.transAxes)
     ax.set_yscale("log")
     ax.set_xlabel("cyclic shift size $k$")
@@ -283,7 +283,7 @@ def f08c_strip(per_model):
     # FP32 floor reference.
     ax.axvspan(-7, -6, color="grey", alpha=0.12, linewidth=0)
     ax.text(-6.5, len(order) - 0.4, "FP32 FFT floor",
-             color="dimgrey", fontsize=9, ha="center", va="center",
+             color="black", fontsize=9, ha="center", va="center",
              style="italic")
     ax.set_yticks(yticks)
     ax.set_yticklabels(ylabels)

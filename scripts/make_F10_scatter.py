@@ -1,4 +1,4 @@
-"""F10 alternate layout (Option A): in-dist vs OOD scatter.
+﻿"""F10 alternate layout (Option A): in-dist vs OOD scatter.
 
 For each (model, train_family) cell, compute:
   - in_dist relL2  = rel_l2[train_family]   (the diagonal)
@@ -11,7 +11,7 @@ aggregated over seeds with std error bars. Diagonal y=x line for reference;
 Currently only LEMO-PC has cross_family_relL2.json data on dist_*_rd_2d (clean regime).
 Once Caltech sweeps land + we run post_hoc_analyses on those checkpoints, the same
 script will pick up the new data and the scatter will fill in for FNO+FiLM, FNO,
-ffno, memno, etc. — model is encoded as color, family as marker.
+ffno, memno, etc. â€” model is encoded as color, family as marker.
 """
 from __future__ import annotations
 import json, glob
@@ -168,7 +168,7 @@ def main():
         ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
         ax.set_xlabel(r"in-distribution rel$L_2$")
         ax.text(0.5, 0.97, reg_label, transform=ax.transAxes,
-                ha="center", va="top", fontsize=10, color="dimgrey")
+                ha="center", va="top", fontsize=10, color="black")
         ax.grid(linestyle=":", alpha=0.4, which="both")
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
@@ -187,7 +187,7 @@ def main():
                fontsize=7.5, frameon=False,
                ncol=len(model_handles),
                columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.text(0.98, 0.005, fam_legend_text, fontsize=8, color="dimgrey",
+    fig.text(0.98, 0.005, fam_legend_text, fontsize=8, color="black",
              ha="right", va="bottom")
 
     fig.suptitle("",

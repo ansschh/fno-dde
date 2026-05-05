@@ -1,4 +1,4 @@
-"""M4 — Cyclic-shift equivariance demo (T1 in pictures).
+﻿"""M4 â€” Cyclic-shift equivariance demo (T1 in pictures).
 
 For ONE input trajectory `x` from one family's test set, render side-by-side:
 
@@ -6,7 +6,7 @@ For ONE input trajectory `x` from one family's test set, render side-by-side:
   Bottom row: LEMO-PC(rho_k x)  for the same k's
 
 The bottom row should look visually identical to a cyclic shift of
-LEMO-PC(rho_0 x) — that's Theorem T1 in pictures.
+LEMO-PC(rho_0 x) â€” that's Theorem T1 in pictures.
 
 Annotations: per-shift rel_L2 error
   e_k = ||LEMO(rho_k x) - rho_k LEMO(x)||_2 / ||LEMO(x)||_2
@@ -109,7 +109,7 @@ def main():
             errs.append(num / den)
             left_panels.append(y_shift[0, t_show, ..., chan].cpu().numpy())
             right_panels.append(y_roll[0, t_show, ..., chan].cpu().numpy())
-    # Per-column SIGNED difference: LEMO(ρ_k x) - ρ_k LEMO(x). T1 -> near zero
+    # Per-column SIGNED difference: LEMO(Ï_k x) - Ï_k LEMO(x). T1 -> near zero
     # (FP32 floor). Sign carries information (over- vs under-shoot of T1) so we
     # render with a diverging RdBu_r colormap matching the V01 error-difference
     # palette: red = positive deviation, blue = negative deviation, white = 0.
@@ -135,7 +135,7 @@ def main():
             sp.set_linewidth(0.6)
         # Per-panel k label inside the panel (no axis title)
         ax.text(0.5, 0.97, f"$k = {k}$", transform=ax.transAxes,
-                ha="center", va="top", fontsize=11, color="dimgrey")
+                ha="center", va="top", fontsize=11, color="black")
         ax.text(0.02, 0.98, f"$e_k = {err:.1e}$",
                   transform=ax.transAxes, fontsize=10,
                   va="top", ha="left", color="black",

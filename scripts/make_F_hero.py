@@ -1,15 +1,15 @@
-"""F_hero — page-1 contraction-vs-divergence figure.
+﻿"""F_hero â€” page-1 contraction-vs-divergence figure.
 
 Two-panel layout showing predicted field at long rollout horizons (past
 training T=64): the unconstrained baseline collapses or diverges, while
-σ-projected LEMO-PC stays bounded and on-target.
+Ïƒ-projected LEMO-PC stays bounded and on-target.
 
 Reads `long_rollout_fields.npz` from any local sweep root (rglob). The
 chosen baseline pair is auto-selected to maximize visual contrast under
 the GT attractor norm band [16, 59] computed from ground-truth viz cells.
 
 Output (no titles, no captions; LaTeX caption is set in the .tex file):
-  NeurIPS_LEMO/figures/F_hero.{pdf,png}      — 2x2 grid
+  NeurIPS_LEMO/figures/F_hero.{pdf,png}      â€” 2x2 grid
                                               top: GT @ t=128, GT @ t=256
                                               bottom: unconstrained pred (left) vs LEMO-PC (right) at t=256
 
@@ -43,13 +43,13 @@ TRAIN_T = 64
 PREFERRED_FAMS = ["dist_uniform_rd_2d", "dist_exp_rd_2d", "dist_gamma_rd_2d",
                    "dist_gaussian_rd_2d", "dist_powerlaw_rd_2d"]
 LEMO_PC = "lemo_pc_nd"
-# "Unconstrained LEMO" = LEMO architecture WITHOUT σ-projection. The most
-# direct ablation of the σ-projection guarantee: lemo_bcorrect_nd is LEMO-PC
-# minus the σ-projection step. Without σ, the model collapses to ~37 norm
-# (below the GT attractor band [16, 59]) — visually featureless predictions
+# "Unconstrained LEMO" = LEMO architecture WITHOUT Ïƒ-projection. The most
+# direct ablation of the Ïƒ-projection guarantee: lemo_bcorrect_nd is LEMO-PC
+# minus the Ïƒ-projection step. Without Ïƒ, the model collapses to ~37 norm
+# (below the GT attractor band [16, 59]) â€” visually featureless predictions
 # vs LEMO-PC's structured outputs.
 UNCONSTRAINED_CANDIDATES = [
-    "lemo_bcorrect_nd",    # LEMO without σ-projection (cleanest ablation)
+    "lemo_bcorrect_nd",    # LEMO without Ïƒ-projection (cleanest ablation)
     "noneq_film_nd",       # non-equivariant ablation (different failure mode)
     "ndde_nd", "s4_nd", "memno_nd", "ffno_nd", "fno_film_nd",
 ]
@@ -154,7 +154,7 @@ def main():
     print(f"[F_hero] T={T} frames; showing t={t_show}")
 
     # Per-row vmax: each row uses the maximum absolute value of its own
-    # frames, so neither row washes out under a shared scale. The σ-projection
+    # frames, so neither row washes out under a shared scale. The Ïƒ-projection
     # story is visible from norm annotations + structural features.
     unc_frames = np.stack([p_unc[0, t, ..., 0] for t in t_show], axis=0)
     lemo_frames = np.stack([p_lemo[0, t, ..., 0] for t in t_show], axis=0)
@@ -228,7 +228,7 @@ def main():
             suffix = " (extrapolation)"
         ax_unc.text(0.5, 1.04, f"$t={t}${suffix}",
                     transform=ax_unc.transAxes, ha="center", va="bottom",
-                    fontsize=10, color="dimgrey")
+                    fontsize=10, color="black")
 
     # Row labels on the left margin
     axes[0, 0].set_ylabel(label_unc, fontsize=11, rotation=90, labelpad=10,

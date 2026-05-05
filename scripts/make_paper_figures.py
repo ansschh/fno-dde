@@ -1,11 +1,11 @@
-"""Paper figure generation — all 2D dist-kernel paper-blocking figures.
+﻿"""Paper figure generation â€” all 2D dist-kernel paper-blocking figures.
 
 Reads:
   - paper/stats/paired_permutation.json         (headline stats)
   - extracted/pod1/.../dist_kernel_v2_p1/raw/.. (LEMO/LEMO_PC test_results.json)
   - extracted/pod2/.../dist_kernel_v2_p2/logs/  (FNO/MarkovFNO/WindFNO from logs)
   - extracted/pod3/outputs/final_baselines/raw/ (MemNO/F-FNO when available)
-  - paper/figures/sigma_sweep/                  (σ-sweep when Caltech done)
+  - paper/figures/sigma_sweep/                  (Ïƒ-sweep when Caltech done)
 
 Produces (in paper/figures/):
   - F01_headline_bar.{pdf,png}        6-baseline % improvement with bootstrap CI + p
@@ -394,7 +394,7 @@ def fig05_training_curves(history_by_model: dict):
             continue
         ax.set_yscale("log")
         ax.set_xlabel("epoch")
-        ax.set_title(FAM_LABELS[fam], color="dimgrey", pad=8)
+        ax.set_title(FAM_LABELS[fam], color="black", pad=8)
         ax.grid(False)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
@@ -436,7 +436,7 @@ def fig06_perframe_rollout():
     perframe = _discover_jsons("per_frame.json")
     if not perframe:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.6 * len(FAMS), 4.4),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(4.2 * len(FAMS), 6.4),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
@@ -488,20 +488,26 @@ def fig06_perframe_rollout():
             continue
         ax.set_yscale("log")
         ax.set_xlabel("future rollout step $t$")
-        ax.text(0.5, 0.97, FAM_LABELS[fam], transform=ax.transAxes,
-                ha="center", va="top", fontsize=10, color="dimgrey")
-        ax.grid(linestyle="--", alpha=0.4)
+        ax.set_title(FAM_LABELS[fam], pad=8)
+        ax.grid(False)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
     if not plotted_any:
         plt.close(fig)
         return None
-    axes[0].set_ylabel(r"per-step rel$L_2$")
+    axes[0].set_ylabel(r"per-step rel-$L_2$", fontweight="bold")
     if handles:
-        # Single-row legend: all baselines on one line.
+        n = len(handles)
+        ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
         fig.legend(handles, labels_seen, loc="lower center",
-                    bbox_to_anchor=(0.5, 0.01),
-                    ncol=len(handles), frameon=False, fontsize=8.5,
-                    columnspacing=1.4, handlelength=1.6, handletextpad=0.5)
-    fig.subplots_adjust(left=0.06, right=0.99, top=0.97, bottom=0.22, wspace=0.10)
+                    bbox_to_anchor=(0.5, 0.0),
+                    ncol=ncol, frameon=False,
+                    columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
+        rows = int(np.ceil(n / ncol))
+        bot = 0.16 + 0.06 * rows
+    else:
+        bot = 0.16
+    fig.subplots_adjust(left=0.05, right=0.99, top=0.93, bottom=bot, wspace=0.10)
     out = FIG_DIR / "F06_perframe_rollout.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)
@@ -510,7 +516,7 @@ def fig06_perframe_rollout():
 
 
 def fig07_op_norm_trajectory(history: dict):
-    """op_norm_max vs epoch (proves σ-projection binding once σ-sweep cells exist)."""
+    """op_norm_max vs epoch (proves Ïƒ-projection binding once Ïƒ-sweep cells exist)."""
     if not history:
         return None
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -532,7 +538,7 @@ def fig07_op_norm_trajectory(history: dict):
         return None
     ax.set_xlabel("epoch")
     ax.set_ylabel(r"$\max_m\,\sigma_{\max}(K[:,:,m])$")
-    ax.set_title("Raw spectral kernel op-norm trajectory (proves σ-projection binding)")
+    ax.set_title("Raw spectral kernel op-norm trajectory (proves Ïƒ-projection binding)")
     ax.grid(linestyle="--", alpha=0.4)
     fig.tight_layout()
     out = FIG_DIR / "F07_op_norm_trajectory.pdf"
@@ -548,7 +554,7 @@ def fig08_equivariance_test():
     rglob discovery picks up `equivariance.json` (sparse k) and
     `equivariance_dense.json` (dense k grid) for every model, so the figure
     is multi-architecture: LEMO-PC near the FP32 FFT floor, the FNO/FiLM
-    family well above it. Each curve is mean ± std across (fam, reg, seed)
+    family well above it. Each curve is mean Â± std across (fam, reg, seed)
     triples that have a value for that shift size.
     """
     sparse = _discover_jsons("equivariance.json")
@@ -606,7 +612,7 @@ def fig08_equivariance_test():
     # 1e-3 to 1e-2 range. Annotated as a band, not a "pass/fail" line.
     ax.axhspan(1e-3, 1e-2, color="grey", alpha=0.12, linewidth=0)
     ax.text(0.98, 0.02, "FP32 FFT floor",
-             color="dimgrey", fontsize=8, ha="right", va="bottom",
+             color="black", fontsize=8, ha="right", va="bottom",
              style="italic", transform=ax.transAxes)
     ax.set_yscale("log")
     ax.set_xlabel("cyclic shift size $k$")
@@ -644,22 +650,22 @@ def main():
 
     figs = []
     for name, fn, args in [
-        # F01 dropped (2026-05-03) — same 4 paired-permutation improvement
+        # F01 dropped (2026-05-03) â€” same 4 paired-permutation improvement
         # numbers as tables/T01_headline_per_baseline.tex; bar chart adds
         # nothing the table doesn't, plus the title overlap was broken.
         # ("F01 headline bar",        fig01_headline_bar,       (stats,)),
-        # F02 dropped (2026-05-03) — same data as T02_perfamily_relL2.tex.
+        # F02 dropped (2026-05-03) â€” same data as T02_perfamily_relL2.tex.
         # Heatmap had a colormap-saturation problem: the LEMO no-FiLM column
         # (broken checkpoints, ~0.43) pushed vmax so high that the FNO vs
         # MarkovFNO difference (0.07 vs 0.11) was visually compressed.
         # T02 carries the per-family numbers without this artifact.
         # ("F02 per-family heatmap",  fig02_perfamily_heatmap,  (data,)),
-        # F03 dropped (2026-05-03) — replaced by tables/T03_perregime_aggregated.tex.
+        # F03 dropped (2026-05-03) â€” replaced by tables/T03_perregime_aggregated.tex.
         # Per-regime box plot was redundant with the per-regime breakdown table
         # once F02 was dropped; ranking is regime-stable across clean/lowres/
         # noisy (per C20 finding too) so the visual axis carries no signal.
         # ("F03 per-regime box",      fig03_perregime_box,      (data,)),
-        # F04 dropped (2026-05-03) — Hedges-g bar chart had two visual bugs:
+        # F04 dropped (2026-05-03) â€” Hedges-g bar chart had two visual bugs:
         # (i) the "large (g=0.8)" annotation collides with the title, and
         # (ii) the vs-LEMO-no-FiLM bar at g=23.43 (from broken checkpoints)
         # distorts the x-axis so the genuine g=5-6 bars look small. Folded

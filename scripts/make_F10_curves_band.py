@@ -116,7 +116,7 @@ def _plot_panel(ax, data, title, models_present):
         handles.append(line)
         labels.append(MODEL_LABEL.get(m, m))
     if title:
-        ax.set_title(title, color="dimgrey", pad=10)
+        ax.set_title(title, color="black", pad=10)
     ax.set_yscale("log")
     ax.set_xlabel("trained on family")
     ax.grid(False)

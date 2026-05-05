@@ -1,9 +1,9 @@
-"""Prototype 3 layouts for the scalar-DDE baseline figure (hutchinson/MG/wright).
+﻿"""Prototype 3 layouts for the scalar-DDE baseline figure (hutchinson/MG/wright).
 
 Generates:
-  F06b_scalar_optionA.png  — 3-row x 3-col grid (regime x family)
-  F06b_scalar_optionB.png  — 1 row x 3 cols (one per family); linestyle = regime
-  F06b_scalar_optionC.png  — 1 row x 3 cols (one per regime); families averaged
+  F06b_scalar_optionA.png  â€” 3-row x 3-col grid (regime x family)
+  F06b_scalar_optionB.png  â€” 1 row x 3 cols (one per family); linestyle = regime
+  F06b_scalar_optionC.png  â€” 1 row x 3 cols (one per regime); families averaged
 
 All variants share the same 6 models with consistent color coding.
 """
@@ -150,7 +150,7 @@ def option_A():
                 ax.set_ylabel(f"{REGIME_LABELS[reg]}\nrel$L_2$")
             if i == len(REGIMES) - 1:
                 ax.set_xlabel("rollout step t")
-    fig.suptitle("Per-step rel$L_2$ — scalar-DDE baselines (Option A: regime × family grid)",
+    fig.suptitle("Per-step rel$L_2$ â€” scalar-DDE baselines (Option A: regime Ã— family grid)",
                   y=0.995)
     fig.legend(list(all_handles.values()), list(all_handles.keys()),
                 loc="lower center", bbox_to_anchor=(0.5, -0.02),
@@ -209,7 +209,7 @@ def option_B():
                        bbox_to_anchor=(0.75, -0.06),
                        ncol=3, frameon=False, fontsize=9, title="Regime")
     fig.add_artist(leg1)
-    fig.suptitle("Per-step rel$L_2$ — scalar-DDE baselines (Option B: regime as linestyle)",
+    fig.suptitle("Per-step rel$L_2$ â€” scalar-DDE baselines (Option B: regime as linestyle)",
                   y=0.995)
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
     out = FIG_DIR / "F06b_scalar_optionB.png"
@@ -253,7 +253,7 @@ def option_C():
             L = min(len(n) for n in naives)
             n_arr = np.stack([n[:L] for n in naives], axis=0)
             line, = ax.plot(np.arange(1, L + 1), n_arr.mean(axis=0),
-                            color="dimgrey", lw=1.1,
+                            color="black", lw=1.1,
                             linestyle="--", label="naive copy")
             if "naive copy" not in legend_set:
                 all_handles["naive copy"] = line
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     # Option C is the chosen layout (regime panels, families averaged with min/max band).
     # option_A (regime x family grid) and option_B (regime as linestyle) are kept
     # in this file for reference / future use (e.g. when porting this layout to
-    # the distributed-kernel families) — disabled by default to avoid stale output.
+    # the distributed-kernel families) â€” disabled by default to avoid stale output.
     out = option_C()
     print(f"  option_C -> {out.name}")
     print(f"[layouts] generated in {FIG_DIR}")

@@ -1,9 +1,9 @@
-"""F11 robustness — combined FGSM + Gaussian-noise figure.
+﻿"""F11 robustness â€” combined FGSM + Gaussian-noise figure.
 
 Generates two outputs:
-  - F11_robustness.{pdf,png}           (main paper, 1x2 — regimes collapsed
-                                        into mean ± min/max band)
-  - F11_robustness_appendix.{pdf,png}  (appendix, 2x3 — regimes broken out
+  - F11_robustness.{pdf,png}           (main paper, 1x2 â€” regimes collapsed
+                                        into mean Â± min/max band)
+  - F11_robustness_appendix.{pdf,png}  (appendix, 2x3 â€” regimes broken out
                                         as separate columns for transparency)
 
 The main-paper version uses a thin band as visual proof that regimes carry no
@@ -147,7 +147,7 @@ def _regime_aggregate(per_regime_per_x):
 
 
 def _plot_panel_band(ax, data, x_label, title):
-    """Option A: mean ± min/max over regimes per model."""
+    """Option A: mean Â± min/max over regimes per model."""
     handles = []
     for model in _model_order_present(data, data):
         if model not in data: continue
@@ -171,7 +171,7 @@ def _plot_panel_band(ax, data, x_label, title):
 
 
 def _plot_panel_single_regime(ax, data, regime, x_label, title):
-    """Option B: one panel per regime, mean ± std over seeds."""
+    """Option B: one panel per regime, mean Â± std over seeds."""
     handles = []
     for model in _model_order_present(data, data):
         per_x = data[model].get(regime, {})
@@ -189,7 +189,7 @@ def _plot_panel_single_regime(ax, data, regime, x_label, title):
     ax.set_yscale("log")
     ax.set_xlabel(x_label)
     if title:
-        ax.set_title(title, color="dimgrey", pad=8)
+        ax.set_title(title, color="black", pad=8)
     ax.grid(False)
     # Drop minor ticks and reduce major-tick density.
     ax.minorticks_off()
@@ -201,7 +201,7 @@ def _plot_panel_single_regime(ax, data, regime, x_label, title):
 
 
 def make_main(data_fgsm, data_noise):
-    """1×2 main-paper version: clean regime only, mean ± std over seeds.
+    """1Ã—2 main-paper version: clean regime only, mean Â± std over seeds.
     Regime-independence is established empirically and shown in the appendix
     figure; the main figure focuses on the FGSM-vs-Gaussian contrast.
     """
@@ -233,8 +233,8 @@ def make_main(data_fgsm, data_noise):
 
 
 def make_appendix(data_fgsm, data_noise):
-    """2×3 appendix version: regimes as columns, perturbation type as rows."""
-    fig, axes = plt.subplots(2, 3, figsize=(18.0, 9.6),
+    """2Ã—3 appendix version: regimes as columns, perturbation type as rows."""
+    fig, axes = plt.subplots(2, 3, figsize=(20.0, 11.0),
                               sharey="row", sharex="row")
     handles_all = {}
     for j, reg in enumerate(REGIMES):
@@ -261,9 +261,9 @@ def make_appendix(data_fgsm, data_noise):
                ncol=ncol, frameon=False,
                columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
     rows = int(np.ceil(n / ncol))
-    bot = 0.05 + 0.045 * rows
-    fig.subplots_adjust(left=0.06, right=0.98, top=0.95, bottom=bot,
-                          hspace=0.30, wspace=0.10)
+    bot = 0.08 + 0.06 * rows
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=bot,
+                          hspace=0.42, wspace=0.10)
     out = FIG_DIR / "F11_robustness_appendix.png"
     fig.savefig(out, dpi=150)
     fig.savefig(out.with_suffix(".pdf"))
