@@ -324,17 +324,9 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                               "right": 0.92})
     if n == 1:
         axes2 = axes2.reshape(n_rows_b, 1)
-    row_labels2 = ["Ground Truth", "LEMO Error"]
-    if has_fno_b:
-        row_labels2.append("Error Difference")
-    for i, lbl in enumerate(row_labels2):
-        axes2[i, 0].set_ylabel(lbl, fontsize=14, rotation=0, ha="right",
-                                 va="center", labelpad=20)
 
     im_gt = im_le = im_dd = None
     for j, (fam, y_gt, y_lemo, y_fno, l2_hard) in enumerate(panels):
-        axes2[0, j].set_title(f"{FAM_LABELS[fam]}\n($\\ell_2$={l2_hard:.3f})",
-                                fontsize=12)
         im = _draw_heatmap(axes2[0, j], y_gt, gt_vmax, return_im=True)
         if j == n - 1: im_gt = im
         _overlay_gt_contours(axes2[0, j], y_gt, gt_vmax)
@@ -356,17 +348,16 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                 axes2[2, j].text(0.5, 0.5, "n/a", ha="center", va="center",
                                    transform=axes2[2, j].transAxes,
                                    color="dimgrey", fontsize=12)
-    # Per-row colorbars
-    cb_rows = [(axes2[0, -1], im_gt, "field"),
-                (axes2[1, -1], im_le, "pred − GT")]
+    # Per-row colorbars (no labels per user request).
+    cb_rows = [(axes2[0, -1], im_gt),
+                (axes2[1, -1], im_le)]
     if has_fno_b:
-        cb_rows.append((axes2[2, -1], im_dd, "|LEMO err| − |FNO err|"))
-    for ax_row, im_row, lbl in cb_rows:
+        cb_rows.append((axes2[2, -1], im_dd))
+    for ax_row, im_row in cb_rows:
         if im_row is None: continue
         cb = fig2.colorbar(im_row, ax=ax_row, fraction=0.05, pad=0.04,
                             shrink=0.95, aspect=18)
         cb.ax.tick_params(labelsize=8)
-        cb.set_label(lbl, fontsize=9)
 
     fig2.suptitle("",
                    fontsize=16, y=0.99)

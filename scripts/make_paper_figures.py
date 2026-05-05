@@ -351,7 +351,7 @@ def fig05_training_curves(history_by_model: dict):
     """
     if not history_by_model:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.6 * len(FAMS), 4.4),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(4.2 * len(FAMS), 6.4),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
@@ -394,25 +394,30 @@ def fig05_training_curves(history_by_model: dict):
             continue
         ax.set_yscale("log")
         ax.set_xlabel("epoch")
-        ax.set_title(FAM_LABELS[fam])
-        ax.grid(linestyle="--", alpha=0.4)
+        ax.set_title(FAM_LABELS[fam], color="dimgrey", pad=8)
+        ax.grid(False)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
     if not plotted_any:
         plt.close(fig)
         return None
-    axes[0].set_ylabel(r"Validation rel$L_2$")
+    axes[0].set_ylabel(r"Validation rel-$L_2$", fontweight="bold")
     # User constraint: clip x-axis to first 100 epochs.
     for ax in axes:
         if ax.get_visible():
             ax.set_xlim(left=1, right=100)
     if handles:
-        # Legend in two rows for breathing room with 12+ baselines.
         n = len(handles)
-        ncol = max(1, (n + 1) // 2)
+        ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
         fig.legend(handles, labels, loc="lower center",
-                    bbox_to_anchor=(0.5, 0.01),
-                    ncol=ncol, frameon=False, fontsize=8.5,
-                    columnspacing=1.6, handlelength=1.8, handletextpad=0.6)
-    fig.subplots_adjust(left=0.06, right=0.99, top=0.97, bottom=0.22, wspace=0.10)
+                    bbox_to_anchor=(0.5, 0.0),
+                    ncol=ncol, frameon=False,
+                    columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
+        rows = int(np.ceil(n / ncol))
+        bot = 0.16 + 0.06 * rows
+    else:
+        bot = 0.16
+    fig.subplots_adjust(left=0.06, right=0.99, top=0.93, bottom=bot, wspace=0.10)
     out = FIG_DIR / "F05_training_curves.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)
