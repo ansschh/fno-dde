@@ -53,36 +53,45 @@ for g in 0 1 2 3 4 5 6 7; do
     echo "[backfill] shard_$g: $n cells"
 done
 
-# Launch one worker per GPU.
+# Per-GPU runner script (deterministic, no inline heredoc quoting).
+RUNNER_DIR="$SHARDS_DIR/runners"
+mkdir -p "$RUNNER_DIR"
+
+for g in 0 1 2 3 4 5 6 7; do
+    SHARD="$SHARDS_DIR/shard_$g.txt"
+    LOG="$LOG_DIR/gpu_$g.log"
+    RUNNER="$RUNNER_DIR/run_gpu_$g.sh"
+    cat > "$RUNNER" <<RUNNEREOF
+#!/usr/bin/env bash
+set -uo pipefail
+exec >> "$LOG" 2>&1
+cd /workspace/dde-fno
+export CUDA_VISIBLE_DEVICES=$g
+
+echo "[gpu $g] === step1: unified worker ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/_pod_unified_worker.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 || echo "[gpu $g] step1 failed (continuing)"
+
+echo "[gpu $g] === step2: cross_family ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_cross_family.py --shard "$SHARD" --data_dir "$DATA_DIR" --gpu 0 --n_batches 8 || echo "[gpu $g] step2 failed (continuing)"
+
+echo "[gpu $g] === step3: long_horizon ===" "\$(date -u +%H:%M:%S)"
+python3 scripts/eval_long_horizon.py --shard "$SHARD" --data_dir "$DATA_DIR" || echo "[gpu $g] step3 failed (continuing)"
+
+echo "[gpu $g] DONE" "\$(date -u +%H:%M:%S)"
+RUNNEREOF
+    chmod +x "$RUNNER"
+done
+
+# Launch via tmux: master window + one window per GPU.
 SESSION="backfill"
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 tmux new-session -d -s "$SESSION" -n master "echo backfill master; sleep 86400"
 
 for g in 0 1 2 3 4 5 6 7; do
-    SHARD="$SHARDS_DIR/shard_$g.txt"
-    LOG="$LOG_DIR/gpu_$g.log"
-
-    CMD=$(cat <<EOF
-set -e
-cd /workspace/dde-fno
-echo '[gpu $g] === step1: unified worker (capture/lipschitz/equiv/adv/noise) ===' | tee -a $LOG
-CUDA_VISIBLE_DEVICES=$g python3 scripts/_pod_unified_worker.py \\
-    --shard $SHARD --data_dir $DATA_DIR --gpu 0 2>&1 | tee -a $LOG
-
-echo '[gpu $g] === step2: cross_family ===' | tee -a $LOG
-CUDA_VISIBLE_DEVICES=$g python3 scripts/eval_cross_family.py \\
-    --shard $SHARD --data_dir $DATA_DIR --gpu 0 --n_batches 8 2>&1 | tee -a $LOG
-
-echo '[gpu $g] === step3: long_horizon ===' | tee -a $LOG
-CUDA_VISIBLE_DEVICES=$g python3 scripts/eval_long_horizon.py \\
-    --shard $SHARD --data_dir $DATA_DIR 2>&1 | tee -a $LOG
-
-echo '[gpu $g] DONE' | tee -a $LOG
-EOF
-)
-    tmux new-window -t "$SESSION" -n "g$g" "bash -c '$CMD'"
+    tmux new-window -t "$SESSION" -n "g$g" "$RUNNER_DIR/run_gpu_$g.sh"
 done
 
 echo "[backfill] launched 8 workers in tmux session '$SESSION'"
+echo "[backfill] runners: $RUNNER_DIR/run_gpu_*.sh"
 echo "[backfill] monitor: ssh ... 'tmux attach -t $SESSION'"
 echo "[backfill] tail logs: ssh ... 'tail -f $LOG_DIR/gpu_*.log'"
