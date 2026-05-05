@@ -51,16 +51,47 @@ SD_LABELS = {"mackey_glass_2d": "Mackey-Glass", "wright_2d": "Wright",
 REGIMES = ["clean", "lowres", "noisy"]
 SEEDS = ["s42", "s123", "s456"]
 
-MODEL_LABELS = {"lemo_pc_nd": "LEMO-PC", "lemo_nd": "LEMO",
-                "fno_nd": "FNO", "markov_fno_nd": "Markov-FNO",
-                "windowed_fno_nd": "Window-FNO", "memno_nd": "MemNO",
-                "ffno_nd": "F-FNO", "unet_nd": "UNet"}
-MODEL_COLOR = {"lemo_pc_nd": "#d62728", "lemo_nd": "#ff7f0e",
-               "fno_nd": "#1f77b4", "markov_fno_nd": "#2ca02c",
-               "windowed_fno_nd": "#9467bd", "memno_nd": "#8c564b",
-               "ffno_nd": "#e377c2", "unet_nd": "#7f7f7f"}
-MODEL_ORDER = ["lemo_pc_nd", "lemo_nd", "fno_nd", "markov_fno_nd",
-               "windowed_fno_nd", "memno_nd", "ffno_nd", "unet_nd"]
+MODEL_LABELS = {
+    "lemo_pc_nd":                 "LEMO-PC",
+    "lemo_nd":                    "LEMO",
+    "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
+    "lemo_bcorrect_nd":           "LEMO-PC (b-correct)",
+    "fno_nd":                     "FNO",
+    "fno_film_nd":                "FNO+FiLM",
+    "noneq_film_nd":              "Non-equiv +FiLM",
+    "markov_fno_nd":              "Markov-FNO",
+    "windowed_fno_nd":            "Window-FNO",
+    "memno_nd":                   "MemNO",
+    "ffno_nd":                    "F-FNO",
+    "s4_nd":                      "S4",
+    "nide_nd":                    "NIDE",
+    "ndde_nd":                    "NDDE",
+    "unet_nd":                    "UNet",
+}
+MODEL_COLOR = {
+    "lemo_pc_nd":                 "#d62728",
+    "lemo_nd":                    "#ff7f0e",
+    "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "lemo_bcorrect_nd":           "#bcbd22",
+    "fno_nd":                     "#1f77b4",
+    "fno_film_nd":                "#17becf",
+    "noneq_film_nd":              "#c5b0d5",
+    "markov_fno_nd":              "#2ca02c",
+    "windowed_fno_nd":            "#9467bd",
+    "memno_nd":                   "#e377c2",
+    "ffno_nd":                    "#8c564b",
+    "s4_nd":                      "#bcbd22",
+    "nide_nd":                    "#aec7e8",
+    "ndde_nd":                    "#98df8a",
+    "unet_nd":                    "#7f7f7f",
+}
+MODEL_ORDER = [
+    "lemo_pc_nd", "lemo_nd", "causal_smooth_lemo_pc_nd",
+    "fno_film_nd", "noneq_film_nd",
+    "fno_nd", "markov_fno_nd", "windowed_fno_nd",
+    "memno_nd", "ffno_nd", "s4_nd", "nide_nd", "ndde_nd",
+    "unet_nd",
+]
 
 
 # --- common loaders ---
@@ -225,7 +256,7 @@ def f2_best_ckpt_epoch():
         plt.close(fig); return None
     ax.set_xlabel("epoch of best validation rel-$L_2$")
     ax.set_ylabel("count of cells")
-    ax.set_title("Best-checkpoint epoch distribution (45 cells per model)")
+    # title removed
     ax.legend(bbox_to_anchor=(1.02, 1.0), loc="upper left", frameon=False, fontsize=9)
     ax.grid(linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -239,38 +270,90 @@ def f2_best_ckpt_epoch():
 # --- F4 kernel magnitude histogram ---
 
 def _extract_K_complex(snap):
+    """Reconstruct the spectral-kernel complex tensor from a kernel snapshot.
+
+    Supports two storage layouts written by `capture_paper_artifacts.py`:
+    - Complex Parameter (LEMO-PC, FNO_nd, MarkovFNO, WindowFNO): keys end
+      in `__re` / `__im` because the original tensor was complex and we
+      split for storage.
+    - F-FNO (mfno_paper.SpectralConv1d): two separate real Parameters
+      `<prefix>.weight_real` and `<prefix>.weight_imag` written without
+      `__re/__im` suffixing.
+    """
     keys = list(snap.keys() if hasattr(snap, "keys") else [])
-    re_keys = [k for k in keys if k.endswith("__re") and "weights" in k and "film" not in k]
-    if not re_keys:
-        return None
-    re = snap[re_keys[0]]
-    im_key = re_keys[0].replace("__re", "__im")
-    if im_key not in keys:
-        return None
-    return re + 1j * snap[im_key]
+    # Layout 1: complex tensor split into __re/__im on save.
+    re_keys = [k for k in keys
+                if k.endswith("__re") and "weights" in k and "film" not in k]
+    if re_keys:
+        re = snap[re_keys[0]]
+        im_key = re_keys[0].replace("__re", "__im")
+        if im_key in keys:
+            return re + 1j * snap[im_key]
+    # Layout 2: F-FNO separate weight_real / weight_imag Parameters.
+    real_keys = [k for k in keys if k.endswith("weight_real") and "film" not in k]
+    if real_keys:
+        re = snap[real_keys[0]]
+        im_key = real_keys[0].replace("weight_real", "weight_imag")
+        if im_key in keys:
+            return re + 1j * snap[im_key]
+    return None
 
 
 def f4_kernel_magnitude_hist():
-    snaps = kernel_for("lemo_pc_nd")
-    if not snaps:
-        return None
-    mags = []
-    for snap in snaps.values():
-        K = _extract_K_complex(snap)
-        if K is None:
+    """Multi-model spectral-kernel magnitude KDE with per-cell variability band.
+
+    For each model, fits a per-cell KDE on `log10|K_{i,o,m}|`, then aggregates
+    across cells (family x seed) into mean +/- 1 sigma. Plot shows the mean
+    curve as a solid line and a translucent fill_between band of mean +/- 1
+    sigma so reviewers can read both the distribution shape AND its stability
+    across cells. Auto-extends to additional models in MODEL_ORDER as their
+    `kernel_snapshot.npz` files land from the running offload sweep.
+    """
+    from scipy.stats import gaussian_kde
+    curves = []   # list of (label, color, mean, std, n_cells)
+    x_grid = np.linspace(-12, 0, 600)
+    for mdl in MODEL_ORDER:
+        snaps = kernel_for(mdl)
+        if not snaps:
             continue
-        mags.append(np.abs(K).flatten())
-    if not mags:
+        per_cell = []
+        for snap in snaps.values():
+            K = _extract_K_complex(snap)
+            if K is None:
+                continue
+            arr = np.abs(K).flatten()
+            arr = arr[arr > 1e-12]
+            if arr.size < 50:
+                continue
+            log_arr = np.log10(arr)
+            try:
+                kde = gaussian_kde(log_arr, bw_method=0.15)
+                per_cell.append(kde(x_grid))
+            except Exception:
+                continue
+        if len(per_cell) < 2:
+            continue
+        stack = np.stack(per_cell, axis=0)
+        mean = stack.mean(axis=0)
+        std = stack.std(axis=0)
+        curves.append((MODEL_LABELS.get(mdl, mdl), MODEL_COLOR.get(mdl, "#444"),
+                        mean, std, len(per_cell)))
+    if not curves:
         return None
-    arr = np.concatenate(mags)
-    arr = arr[arr > 1e-12]
-    fig, ax = plt.subplots(figsize=(6, 3.4))
-    ax.hist(np.log10(arr), bins=80, color="#d62728", alpha=0.85, edgecolor="black",
-            linewidth=0.3)
+    fig, ax = plt.subplots(figsize=(7.0, 3.6))
+    for label, color, mean, std, n_cells in curves:
+        ax.fill_between(x_grid, mean - std, mean + std, color=color, alpha=0.18,
+                          linewidth=0)
+        ax.plot(x_grid, mean, color=color,
+                lw=2.2 if label == "LEMO-PC" else 1.4,
+                label=f"{label} (n={n_cells})")
     ax.set_xlabel(r"$\log_{10}|K_{i,o,m}|$")
-    ax.set_ylabel("count")
-    ax.set_title("LEMO-PC spectral-kernel magnitude distribution (15 cells)")
-    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    ax.set_ylabel("density")
+    # title removed
+    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    ax.grid(linestyle="--", alpha=0.3)
+    ax.set_xlim(-12, 0)
+    ax.set_ylim(bottom=0)
     fig.tight_layout()
     out = FIG / "F4_kernel_magnitude_hist.pdf"
     fig.savefig(out)
@@ -329,150 +412,371 @@ def f5_film_distributions():
 # --- A4 seed-wise rel-L2 boxplot ---
 
 def a4_seedwise_box():
+    """Per-family mean test rel-L2 per model, averaged over (3 seeds × 3 regimes).
+
+    1 row × 5 cols. Within each panel, one horizontal bar per model;
+    bars sorted by mean (ascending = best at top). Error bar = std over
+    the 9 (regime, seed) cells. LEMO no-FiLM excluded (broken checkpoints).
+    Bottom legend.
+    """
     data = gather_all()
-    rows = []
-    for fam in FAMS:
-        for mdl in MODEL_ORDER:
-            d = data.get(mdl, {})
+    # Drop LEMO no-FiLM — broken checkpoints (rel-L2 ≈ 1.0 = failed predictions).
+    excluded = {"lemo_nd"}
+    models = [m for m in MODEL_ORDER if m not in excluded
+              and any(data.get(m, {}).values())]
+    if not models:
+        return None
+    # Per (model, family): list of rel-L2 values across 9 cells.
+    cells = {}  # (mdl, fam) -> list[float]
+    for mdl in models:
+        d = data.get(mdl, {})
+        for fam in FAMS:
+            vals = []
             for reg in REGIMES:
                 for seed in SEEDS:
                     v = d.get((fam, reg, seed))
                     if v is None:
                         continue
                     rl2 = v.get("test_rel_l2_mean", v.get("test_rel_l2"))
-                    if rl2 is None:
-                        continue
-                    rows.append((fam, mdl, reg, seed, float(rl2)))
-    if not rows:
-        return None
-    fig, ax = plt.subplots(figsize=(11, 4.2))
-    # Group per (fam, model) - one box per pair, all regimes pooled.
-    fams = FAMS
-    models = [m for m in MODEL_ORDER if any(r[1] == m for r in rows)]
-    box_data = []
-    box_labels = []
-    box_colors = []
-    x_centers = []
-    cx = 0
-    fam_centers = []
-    for fam in fams:
-        fam_start = cx
-        for mdl in models:
-            vals = [r[4] for r in rows if r[0] == fam and r[1] == mdl]
+                    if rl2 is not None:
+                        vals.append(float(rl2))
             if vals:
-                box_data.append(vals)
-                box_labels.append("")
-                box_colors.append(MODEL_COLOR[mdl])
-                x_centers.append(cx)
-                cx += 1
-        if cx > fam_start:
-            fam_centers.append((fam, (fam_start + cx - 1) / 2))
-            cx += 1   # gap between families
-    if not box_data:
-        plt.close(fig); return None
-    bp = ax.boxplot(box_data, positions=x_centers, widths=0.7, patch_artist=True,
-                     showfliers=False, medianprops={"color": "black"},
-                     tick_labels=[""] * len(x_centers))
-    for patch, c in zip(bp["boxes"], box_colors):
-        patch.set_facecolor(c); patch.set_alpha(0.7)
-    for j, vals in enumerate(box_data):
-        ax.scatter([x_centers[j]] * len(vals), vals, color="black", s=10, alpha=0.5, zorder=3)
-    ax.set_xticks([c for _, c in fam_centers])
-    ax.set_xticklabels([FAM_LABELS[f] for f, _ in fam_centers], fontsize=10)
-    ax.set_yscale("log")
-    ax.set_ylabel(r"test rel-$L_2$ (log scale)")
-    ax.set_title("Per-family seed-wise rel-$L_2$ distribution (all 3 regimes pooled)")
-    ax.grid(axis="y", linestyle="--", alpha=0.4)
-    # Build legend OUTSIDE plot.
-    legend_handles = [plt.Rectangle((0, 0), 1, 1, color=MODEL_COLOR[m], alpha=0.7)
-                       for m in models]
-    ax.legend(legend_handles, [MODEL_LABELS[m] for m in models],
-              bbox_to_anchor=(1.02, 1.0), loc="upper left", fontsize=8, frameon=False)
-    fig.tight_layout()
+                cells[(mdl, fam)] = vals
+    if not cells:
+        return None
+
+    # Sort models by GLOBAL mean (over all (model, family) cells) so the
+    # bar ordering is consistent across all 5 family panels.
+    global_mean = {}
+    for mdl in models:
+        all_vals = [v for (m, f), vs in cells.items() if m == mdl for v in vs]
+        global_mean[mdl] = float(np.mean(all_vals)) if all_vals else float("inf")
+    models_sorted = sorted(models, key=lambda m: global_mean[m])
+
+    import matplotlib.ticker as mticker
+    n_panels = len(FAMS)
+    fig, axes = plt.subplots(1, n_panels, figsize=(2.6 * n_panels, 2.8),
+                              sharex=False, sharey=True,
+                              gridspec_kw={"wspace": 0.20})
+    if n_panels == 1:
+        axes = [axes]
+    for ax, fam in zip(axes, FAMS):
+        means, stds, colors, labels = [], [], [], []
+        for mdl in models_sorted:
+            vs = cells.get((mdl, fam))
+            if not vs:
+                continue
+            means.append(float(np.mean(vs)))
+            stds.append(float(np.std(vs)))
+            colors.append(MODEL_COLOR.get(mdl, "#444"))
+            labels.append(MODEL_LABELS.get(mdl, mdl))
+        if not means:
+            ax.set_visible(False); continue
+        y_pos = list(range(len(means)))[::-1]
+        ax.barh(y_pos, means, color=colors, alpha=0.85,
+                 edgecolor="black", linewidth=0.4)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.set_xscale("log")
+        ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, subs=(1.0,)))
+        ax.xaxis.set_minor_locator(mticker.LogLocator(
+            base=10.0, subs=np.arange(2, 10) * 0.1, numticks=12))
+        ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+        ax.tick_params(axis="x", which="major", labelsize=8)
+        ax.set_title(FAM_LABELS[fam], fontsize=10, pad=3)
+        ax.grid(axis="x", which="both", linestyle=":", alpha=0.35)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+    for ax in axes[1:]:
+        if ax.get_visible():
+            ax.tick_params(labelleft=False)
+    fig.supxlabel(r"mean test rel-$L_2$  (log scale)", fontsize=10, y=0.03)
+    fig.suptitle("")
+    fig.subplots_adjust(top=0.79, bottom=0.18, left=0.09, right=0.99,
+                         wspace=0.20)
     out = FIG / "A4_seedwise_box.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=200)
     plt.close(fig)
     return out
 
 
 # --- A6 calibration scatter (pred vs target magnitude) ---
 
-def a6_calibration_scatter():
-    vizs = viz_for("lemo_pc_nd")
-    if not vizs:
+def _viz_for_model_any_layer(model: str, regime: str = "clean"):
+    """Loader for A6/A7 — searches all known layer roots for viz_samples."""
+    layers = ["dist_kernel_v2_p1", "film_ablation_caltech", "film_fix_full",
+              "memory_aware_caltech", "memno_ffno_caltech"]
+    out = {}
+    for layer in layers:
+        for base in (REPO / "outputs" / layer / "raw",
+                     EXT / "pod1" / "outputs" / layer / "raw",
+                     EXT / "pod2" / "outputs" / layer / "raw"):
+            if not base.exists():
+                continue
+            for fam in FAMS:
+                for seed in SEEDS:
+                    p = base / fam / regime / model / seed / "viz_samples.npz"
+                    if p.exists() and (fam, regime, seed) not in out:
+                        try:
+                            out[(fam, regime, seed)] = np.load(p)
+                        except Exception:
+                            pass
+    return out
+
+
+def _compute_calibration_r2(model: str, fam: str, regime: str = "clean",
+                             rng_seed: int = 0, n_keep: int = 1500):
+    """Returns (T_concat, P_concat, R²) or None if no viz_samples available.
+
+    Subsamples up to n_keep points per seed (deterministic) for plotting,
+    but R² is computed on the FULL flattened arrays (no subsampling) so
+    table values are exact.
+    """
+    vizs = _viz_for_model_any_layer(model, regime=regime)
+    target_pts, pred_pts = [], []  # for plotting (subsampled)
+    T_full, P_full = [], []        # for R² (full)
+    rng = np.random.RandomState(rng_seed)
+    for seed in SEEDS:
+        d = vizs.get((fam, regime, seed))
+        if d is None:
+            continue
+        t = d["target"][:, -1, ..., 0].flatten()
+        p = d["pred"][:, -1, ..., 0].flatten()
+        T_full.append(t); P_full.append(p)
+        k = min(n_keep, t.size)
+        idx = rng.choice(t.size, k, replace=False)
+        target_pts.append(t[idx]); pred_pts.append(p[idx])
+    if not T_full:
         return None
+    T = np.concatenate(T_full); P = np.concatenate(P_full)
+    sse = float(((P - T) ** 2).sum())
+    sst = float(((T - T.mean()) ** 2).sum() + 1e-12)
+    r2 = 1.0 - sse / sst
+    Tp = np.concatenate(target_pts); Pp = np.concatenate(pred_pts)
+    return Tp, Pp, r2
+
+
+def a6_calibration_scatter():
+    """Multi-model calibration scatter — appendix figure.
+
+    Auto-discovers all models with viz_samples.npz on the dist_*_rd_2d
+    families (clean regime).  Each panel = one family.  R² values for
+    each model are stacked top-left, sorted by R² descending, in model
+    colors (doubles as a per-panel legend).
+    """
+    candidate_models = ["lemo_pc_nd", "fno_film_nd", "lemo_nd", "fno_nd",
+                         "markov_fno_nd", "windowed_fno_nd", "memno_nd",
+                         "ffno_nd", "unet_nd"]
     n_panels = len(FAMS)
-    fig, axes = plt.subplots(1, n_panels, figsize=(2.8 * n_panels, 3.0), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, n_panels, figsize=(2.6 * n_panels, 3.4),
+                              sharex=True, sharey=True,
+                              gridspec_kw={"wspace": 0.08})
     if n_panels == 1:
         axes = [axes]
     plotted = False
     for ax, fam in zip(axes, FAMS):
-        target_pts = []
-        pred_pts = []
-        for seed in SEEDS:
-            d = vizs.get((fam, "clean", seed))
-            if d is None:
+        # Compute R² for each model on this family; keep only those that
+        # actually have data, then sort by R² descending for the corner block.
+        per_model = []  # list of (model, T, P, r2)
+        for m in candidate_models:
+            res = _compute_calibration_r2(m, fam)
+            if res is None:
                 continue
-            t = d["target"][:, -1, ..., 0].flatten()
-            p = d["pred"][:, -1, ..., 0].flatten()
-            n_keep = min(2000, t.size)
-            idx = np.random.RandomState(0).choice(t.size, n_keep, replace=False)
-            target_pts.append(t[idx]); pred_pts.append(p[idx])
-        if not target_pts:
+            T, P, r2 = res
+            per_model.append((m, T, P, r2))
+        if not per_model:
             ax.set_visible(False); continue
-        T = np.concatenate(target_pts); P = np.concatenate(pred_pts)
-        ax.scatter(T, P, s=2, alpha=0.25, color=MODEL_COLOR["lemo_pc_nd"])
-        # y=x reference line.
-        lim = max(np.abs(T).max(), np.abs(P).max())
-        ax.plot([-lim, lim], [-lim, lim], "k--", lw=0.8, alpha=0.6)
+        per_model.sort(key=lambda x: -x[3])  # highest R² first
+
+        # Plot scatter (in original order — not sorted — so first model
+        # added stays on the bottom layer; later overlays on top).
+        Tmin = +np.inf; Tmax = -np.inf
+        for m, T, P, _r2 in per_model:
+            color = MODEL_COLOR.get(m, "#444")
+            ax.scatter(T, P, s=2, alpha=0.10, color=color, rasterized=True)
+            Tmin = min(Tmin, float(T.min()), float(P.min()))
+            Tmax = max(Tmax, float(T.max()), float(P.max()))
+
+        # Top-left R² stack (sorted descending), color-coded.  Right-pad
+        # labels so values align in a monospace-like column.
+        max_label = max(len(MODEL_LABELS.get(m, m)) for m, *_ in per_model)
+        for i, (m, _T, _P, r2) in enumerate(per_model):
+            label = MODEL_LABELS.get(m, m).ljust(max_label)
+            color = MODEL_COLOR.get(m, "#444")
+            ax.text(0.03, 0.97 - i * 0.07,
+                     f"{label}  {r2:.3f}",
+                     transform=ax.transAxes, va="top", ha="left",
+                     fontsize=7.5, family="monospace", color=color,
+                     bbox=dict(facecolor="white", edgecolor="none",
+                                alpha=0.75, pad=1.0))
+
+        pad = 0.05 * (Tmax - Tmin)
+        lo, hi = Tmin - pad, Tmax + pad
+        ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, alpha=0.5, zorder=0)
+        ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
+        ax.set_aspect("equal")
         ax.set_title(FAM_LABELS[fam], fontsize=10)
         ax.set_xlabel("target")
-        ax.grid(linestyle="--", alpha=0.4)
+        ax.grid(linestyle=":", alpha=0.35)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
         plotted = True
     if not plotted:
         plt.close(fig); return None
-    axes[0].set_ylabel("LEMO-PC pred")
-    fig.suptitle("Calibration: target vs prediction at final rollout step", fontsize=11)
+    axes[0].set_ylabel("prediction")
+    fig.suptitle("")",
+                  fontsize=12, y=0.98)
+    fig.subplots_adjust(top=0.88, bottom=0.13, left=0.05, right=0.99,
+                         wspace=0.08)
     out = FIG / "A6_calibration_scatter.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=200)
     plt.close(fig)
     return out
 
 
 # --- A7 residual histogram per model ---
 
+def _residuals_for_model_any_layer(model: str, families=FAMS):
+    """Loader for A7 — pools per-sample rel-L2 across all regimes/seeds for
+    a given (model, family) cell.  Auto-discovers across known layer roots.
+
+    Returns dict (family) -> ndarray of pooled per-sample rel-L2 across
+    all (regime, seed) cells found.
+    """
+    layers = ["dist_kernel_v2_p1", "film_ablation_caltech", "film_fix_full",
+              "memory_aware_caltech", "memno_ffno_caltech"]
+    regimes = ["clean", "lowres", "noisy"]
+    out = {fam: [] for fam in families}
+    seen = set()
+    for layer in layers:
+        for base in (REPO / "outputs" / layer / "raw",
+                     EXT / "pod1" / "outputs" / layer / "raw",
+                     EXT / "pod2" / "outputs" / layer / "raw"):
+            if not base.exists():
+                continue
+            for fam in families:
+                for regime in regimes:
+                    for seed in SEEDS:
+                        p = base / fam / regime / model / seed / "residuals.npz"
+                        key = (fam, regime, model, seed)
+                        if not p.exists() or key in seen:
+                            continue
+                        seen.add(key)
+                        try:
+                            arr = np.load(p)
+                            r = arr.get("rel_l2_per_sample")
+                            if r is None:
+                                r = arr["rel_l2_per_sample"] if "rel_l2_per_sample" in arr.files else None
+                            if r is not None:
+                                out[fam].append(np.asarray(r))
+                        except Exception:
+                            pass
+    out = {fam: (np.concatenate(v) if v else None) for fam, v in out.items()}
+    return out
+
+
 def a7_residual_histogram():
-    fig, ax = plt.subplots(figsize=(7, 3.5))
+    """Per-family per-sample rel-L2 distribution, pooled across regimes + seeds.
+
+    Layout: 1 row × 5 family cols.  KDE curves (one per model) using
+    np.histogram smoothed via Savgol-style log-bin counts.  Median (solid)
+    and p95 (dashed) markers per model annotated as ticks at the bottom.
+
+    Pooling regimes is honest because every model sees the same regime mix
+    (apples-to-apples *across* models).  We do NOT pool families, since
+    families have ~3× different baseline error magnitudes.
+    """
+    # Drop LEMO (no-FiLM) — its checkpoints are broken (rel-L2 near 1.0
+    # = failed predictions), would dominate x-range without saying anything
+    # the FiLM-ablation table doesn't already cover.
+    candidate_models = ["lemo_pc_nd", "fno_film_nd", "fno_nd",
+                         "markov_fno_nd", "windowed_fno_nd", "memno_nd",
+                         "ffno_nd", "unet_nd"]
+    # Compute pooled per-(model, family) arrays first, then plot.
+    pooled = {m: _residuals_for_model_any_layer(m) for m in candidate_models}
+    active_models = [m for m in candidate_models
+                     if any(pooled[m].get(fam) is not None for fam in FAMS)]
+    if not active_models:
+        return None
+
+    n_panels = len(FAMS)
+    # Per-panel y-scaling (sharey=False) so a tall narrow spike in one
+    # family (e.g. sparse FNO+FiLM data on Uniform) does not clip its own
+    # peak nor stretch the y-axis of other panels.
+    fig, axes = plt.subplots(1, n_panels, figsize=(2.6 * n_panels, 3.4),
+                              sharey=False,
+                              gridspec_kw={"wspace": 0.18})
+    if n_panels == 1:
+        axes = [axes]
+
+    # Determine a common x-range per panel from active data; use log10.
     plotted = False
-    for mdl in ("lemo_pc_nd", "lemo_nd"):
-        res = residuals_for(mdl)
-        if not res:
-            continue
-        all_rel = []
-        for d in res.values():
-            r = d.get("rel_l2_per_sample")
-            if r is not None:
-                all_rel.append(r)
-        if not all_rel:
-            continue
-        arr = np.concatenate(all_rel)
-        arr = arr[arr > 0]
-        ax.hist(np.log10(arr + 1e-12), bins=60, alpha=0.55, label=MODEL_LABELS[mdl],
-                color=MODEL_COLOR[mdl], edgecolor="black", linewidth=0.3)
+    for ax, fam in zip(axes, FAMS):
+        any_data = False
+        # Collect data for this family across active models.
+        per_model_data = []
+        for m in active_models:
+            arr = pooled[m].get(fam)
+            if arr is None or len(arr) == 0:
+                continue
+            arr = arr[arr > 0]
+            if len(arr) == 0:
+                continue
+            per_model_data.append((m, np.log10(arr)))
+            any_data = True
+        if not any_data:
+            ax.set_visible(False); continue
+
+        # Shared x bins per panel: union of all model ranges.
+        lo = min(d.min() for _, d in per_model_data)
+        hi = max(d.max() for _, d in per_model_data)
+        lo -= 0.05 * (hi - lo); hi += 0.05 * (hi - lo)
+        bins = np.linspace(lo, hi, 80)
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+        # Plot KDE-style curve (smoothed histogram density) per model.
+        for m, d in per_model_data:
+            counts, _ = np.histogram(d, bins=bins, density=True)
+            # 5-bin moving average for smoothing.
+            kernel = np.ones(5) / 5
+            smoothed = np.convolve(counts, kernel, mode="same")
+            color = MODEL_COLOR.get(m, "#444")
+            ax.plot(bin_centers, smoothed, color=color, lw=1.6,
+                     label=MODEL_LABELS.get(m, m))
+            ax.fill_between(bin_centers, 0, smoothed, color=color, alpha=0.12)
+
+        # Per-model median vertical lines spanning panel.
+        for m, d in per_model_data:
+            color = MODEL_COLOR.get(m, "#444")
+            med = float(np.median(d))
+            ax.axvline(med, color=color, lw=1.0, alpha=0.7, zorder=3)
+
+        ax.set_title(FAM_LABELS[fam], fontsize=10)
+        ax.set_xlabel(r"$\log_{10}$ rel-$L_2$")
+        ax.grid(linestyle=":", alpha=0.35)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+        ax.set_ylim(bottom=0)
+        ax.margins(y=0)
         plotted = True
+
     if not plotted:
         plt.close(fig); return None
-    ax.set_xlabel(r"$\log_{10}$(per-sample test rel-$L_2$)")
-    ax.set_ylabel("count")
-    ax.set_title("Per-sample test rel-$L_2$ distribution (all cells, clean regime)")
-    ax.legend(bbox_to_anchor=(1.02, 1.0), loc="upper left", frameon=False, fontsize=9)
-    ax.grid(axis="y", linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    axes[0].set_ylabel("density")
+
+    # Bottom-of-figure legend (proxy lines per model + marker legend).
+    handles_models = [plt.Line2D([0], [0], color=MODEL_COLOR.get(m, "#444"),
+                                   lw=2, label=MODEL_LABELS.get(m, m))
+                      for m in active_models]
+    handle_med = plt.Line2D([0], [0], color="black", lw=1.2, label="median")
+    fig.legend(handles=handles_models + [handle_med],
+                loc="lower center", bbox_to_anchor=(0.5, -0.02),
+                ncol=len(handles_models) + 1, frameon=False, fontsize=9)
+    fig.suptitle("")
+    fig.subplots_adjust(top=0.86, bottom=0.20, left=0.05, right=0.99,
+                         wspace=0.10)
     out = FIG / "A7_residual_histogram.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=200)
     plt.close(fig)
     return out
 
@@ -508,8 +812,7 @@ def a9_kernel_heatmap_per_family():
         plotted = True
     if not plotted:
         plt.close(fig); return None
-    fig.suptitle(r"LEMO-PC learned spectral kernel $|K_{:,o,m}|$ averaged over input channels + seeds",
-                 fontsize=11)
+    fig.suptitle("")
     fig.tight_layout()
     out = FIG / "A9_kernel_heatmap_per_family.pdf"
     fig.savefig(out, bbox_inches="tight")
@@ -547,7 +850,7 @@ def c8_seedwise_dotplot():
                        rotation=60, ha="right", fontsize=8)
     ax.set_yscale("log")
     ax.set_ylabel(r"test rel-$L_2$")
-    ax.set_title("Per-cell seed-wise rel-$L_2$ (3 dots per (model, cell))")
+    # title removed
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     legend_handles = [plt.Line2D([0], [0], marker="o", color="w",
                                   markerfacecolor=MODEL_COLOR[m], markersize=6,
@@ -621,15 +924,61 @@ def _scatter_panel(stats, x_key, x_label, title, label_models=True, log_x=True):
 
 
 def c13_params_vs_error():
+    """Appendix figure: trainable params vs test rel-L2 (log/log scatter).
+
+    LEMO no-FiLM excluded (broken checkpoints). markov_fno_nd and
+    windowed_fno_nd merged into a single "Combined FNO" point because their
+    params + error are visually indistinguishable.
+    """
     data = gather_all()
     stats = _aggregate_per_model(data)
-    fig = _scatter_panel(stats, "params", "trainable parameters",
-                         "Parameter count vs test rel-$L_2$")
-    if fig is None:
-        return None
+    stats = {m: s for m, s in stats.items() if m != "lemo_nd"}
+    mf = stats.pop("markov_fno_nd", None)
+    wf = stats.pop("windowed_fno_nd", None)
+    if mf and wf:
+        stats["combined_fno"] = {
+            "rl2_mean": float(np.mean([mf["rl2_mean"], wf["rl2_mean"]])),
+            "rl2_std":  float(np.mean([mf["rl2_std"],  wf["rl2_std"]])),
+            "params":   int(np.mean([mf["params"], wf["params"]])),
+            "wall":     float(np.mean([mf["wall"], wf["wall"]])),
+        }
+    elif mf:
+        stats["combined_fno"] = mf
+    elif wf:
+        stats["combined_fno"] = wf
+    label_offsets = {
+        "unet_nd":      (-30, 3),
+        "lemo_pc_nd":   (8, 3),
+        "fno_nd":       (8, 3),
+        "combined_fno": (8, 3),
+    }
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    plotted = False
+    for mdl, s in stats.items():
+        x = s.get("params", 0); y = s.get("rl2_mean", float("nan"))
+        if x <= 0 or not np.isfinite(y) or y <= 0:
+            continue
+        col = MODEL_COLOR.get(mdl, "#6a4f8a")
+        lab = MODEL_LABELS.get(mdl, "Combined FNO" if mdl == "combined_fno" else mdl)
+        ax.errorbar(x, y, yerr=s.get("rl2_std", 0), fmt="o", color=col,
+                    markersize=9, capsize=3, ecolor="#333", elinewidth=0.9,
+                    markeredgecolor="black", markeredgewidth=0.4)
+        ox, oy = label_offsets.get(mdl, (8, 3))
+        ax.annotate(lab, (x, y), xytext=(ox, oy),
+                    textcoords="offset points", fontsize=8.5)
+        plotted = True
+    if not plotted:
+        plt.close(fig); return None
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel("trainable parameters", fontsize=10)
+    ax.set_ylabel(r"test rel-$L_2$ (mean over cells)", fontsize=10)
+    # title removed
+    ax.grid(which="both", linestyle=":", alpha=0.4)
+    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+    fig.tight_layout()
     out = FIG / "C13_params_vs_error.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out
 
@@ -674,7 +1023,7 @@ def c15_param_efficiency_pareto():
     ax.set_yscale("log")
     ax.set_xlabel("trainable parameters")
     ax.set_ylabel(r"test rel-$L_2$")
-    ax.set_title("Parameter-efficiency Pareto frontier")
+    # title removed
     ax.grid(linestyle="--", alpha=0.4)
     fig.tight_layout()
     out = FIG / "C15_param_efficiency_pareto.pdf"
@@ -709,7 +1058,7 @@ def c16_wallclock_pareto():
     ax.set_yscale("log")
     ax.set_xlabel("wall-clock per cell (s)")
     ax.set_ylabel(r"test rel-$L_2$")
-    ax.set_title("Wall-clock Pareto frontier")
+    # title removed
     ax.grid(linestyle="--", alpha=0.4)
     fig.tight_layout()
     out = FIG / "C16_wallclock_pareto.pdf"
@@ -722,100 +1071,173 @@ def c16_wallclock_pareto():
 # --- C20 error vs spatial resolution (regime comparison) ---
 
 def c20_regime_comparison():
+    """Appendix figure: per-regime mean test rel-L2, families pooled.
+
+    LEMO no-FiLM excluded (broken). markov_fno_nd + windowed_fno_nd merged
+    into a single "Combined FNO" group. Bottom legend, concise title.
+    """
     data = gather_all()
-    models = [m for m in MODEL_ORDER if m in data and data[m]]
+    models = [m for m in MODEL_ORDER if m in data and data[m]
+              and m not in {"lemo_nd"}]
     if not models:
         return None
-    means = {m: {} for m in models}
-    stds = {m: {} for m in models}
-    for m in models:
-        for reg in REGIMES:
-            vals = []
+
+    def _mean_std(model_keys, reg):
+        vals = []
+        for m in model_keys:
             for fam in FAMS:
                 for seed in SEEDS:
-                    v = data[m].get((fam, reg, seed))
+                    v = data.get(m, {}).get((fam, reg, seed))
                     if v is None:
                         continue
                     r = v.get("test_rel_l2_mean", v.get("test_rel_l2"))
                     if r is not None:
                         vals.append(float(r))
-            means[m][reg] = float(np.mean(vals)) if vals else float("nan")
-            stds[m][reg] = float(np.std(vals)) if vals else float("nan")
-    fig, ax = plt.subplots(figsize=(7, 3.6))
+        if not vals:
+            return float("nan"), float("nan")
+        return float(np.mean(vals)), float(np.std(vals))
+
+    fno_pair = [m for m in ("markov_fno_nd", "windowed_fno_nd") if m in models]
+    plot_models = [m for m in models if m not in ("markov_fno_nd", "windowed_fno_nd")]
+    if fno_pair:
+        plot_models.append("combined_fno")
+
+    means, stds = {}, {}
+    for m in plot_models:
+        means[m], stds[m] = {}, {}
+        keys = fno_pair if m == "combined_fno" else [m]
+        for reg in REGIMES:
+            mu, sd = _mean_std(keys, reg)
+            means[m][reg] = mu
+            stds[m][reg] = sd
+
+    fig, ax = plt.subplots(figsize=(6.8, 3.4))
     x = np.arange(len(REGIMES))
-    n = len(models)
-    width = 0.8 / n
-    for i, m in enumerate(models):
+    n = len(plot_models)
+    width = 0.8 / max(n, 1)
+    for i, m in enumerate(plot_models):
         ys = [means[m][r] for r in REGIMES]
         es = [stds[m][r] for r in REGIMES]
-        ax.bar(x + (i - n / 2 + 0.5) * width, ys, width, yerr=es, capsize=2,
-               color=MODEL_COLOR[m], alpha=0.85, edgecolor="black", linewidth=0.4,
-               label=MODEL_LABELS[m])
-    ax.set_xticks(x); ax.set_xticklabels(REGIMES)
+        col = MODEL_COLOR.get(m, "#6a4f8a")
+        lab = MODEL_LABELS.get(m, "Combined FNO" if m == "combined_fno" else m)
+        ax.bar(x + (i - n / 2 + 0.5) * width, ys, width, yerr=es,
+               capsize=2, color=col, alpha=0.85, edgecolor="black",
+               linewidth=0.4, label=lab,
+               error_kw=dict(elinewidth=0.9, ecolor="#222"))
+    ax.set_xticks(x)
+    ax.set_xticklabels([r.capitalize() for r in REGIMES])
     ax.set_yscale("log")
     ax.set_ylabel(r"test rel-$L_2$")
-    ax.set_title("Mean test rel-$L_2$ per regime, all 5 dist-kernel families pooled")
-    ax.grid(axis="y", linestyle="--", alpha=0.4)
-    ax.legend(bbox_to_anchor=(1.02, 1.0), loc="upper left", fontsize=8, frameon=False)
-    fig.tight_layout()
+    # title removed
+    ax.grid(axis="y", which="both", linestyle=":", alpha=0.4)
+    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13),
+              ncol=min(len(plot_models), 6), fontsize=8.5, frameon=False)
+    fig.subplots_adjust(top=0.90, bottom=0.27, left=0.10, right=0.97)
     out = FIG / "C20_regime_comparison.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out
 
 
 # --- C22 FiLM γ/β heatmap (out × mode) ---
 
+def _gelu_np(x):
+    return 0.5 * x * (1.0 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x ** 3)))
+
+
+def _compute_film_per_family(snap, block, params):
+    """Forward-pass the 2-layer FiLM MLP: out = (GELU(p @ W0.T + b0)) @ W2.T + b2.
+
+    Returns (gamma, beta), each shape (n_samples, out_ch=64, lag_modes=24).
+    """
+    W0 = snap[f"blocks.{block}.A_lag.film_net.0.weight"]
+    b0 = snap[f"blocks.{block}.A_lag.film_net.0.bias"]
+    W2 = snap[f"blocks.{block}.A_lag.film_net.2.weight"]
+    b2 = snap[f"blocks.{block}.A_lag.film_net.2.bias"]
+    h = _gelu_np(params @ W0.T + b0[None])
+    out = h @ W2.T + b2[None]
+    OC, M = 64, 24
+    g = out[:, : OC * M].reshape(-1, OC, M)
+    b = out[:, OC * M:].reshape(-1, OC, M)
+    return g, b
+
+
 def c22_film_gamma_beta_heatmap():
+    """Appendix figure: per-family mean γ and β (post-FiLM forward pass).
+
+    For each of the 5 families, load the trained lemo_pc_nd kernel_snapshot
+    + a handful of test-sample params, run them through the FiLM 2-layer MLP
+    (block 0), and average γ, β across samples. 5 rows × 2 cols (γ | β).
+    Shared symmetric colormap per column. Concise title.
+    """
     snaps = kernel_for("lemo_pc_nd")
+    vizs = _viz_for_model_any_layer("lemo_pc_nd")
     if not snaps:
         return None
-    fig, axes = plt.subplots(1, 2, figsize=(8, 3.0))
-    plotted = False
-    for snap in snaps.values():
-        # Last film_net layer's bias contains (gamma | beta) packed.  Pick the
-        # largest bias key under any film_net.
-        keys = list(snap.keys())
-        bias_keys = [k for k in keys if "film_net" in k and k.endswith(".bias")]
-        if not bias_keys:
+    fam_to_snap, fam_to_params = {}, {}
+    for (fam, reg, seed), snap in snaps.items():
+        if reg != "clean":
             continue
-        # Pick the bias with the largest size (final FiLM head).
-        chosen = max(bias_keys, key=lambda k: np.asarray(snap[k]).size)
-        bias = np.asarray(snap[chosen])
-        size = bias.size
-        # Expected: size = 2 * out_ch * lag_modes.  out_ch = 64 from cfg.
-        # We know the model has out_ch = lag width (64 here) and lag_modes = 24.
-        # 2 * 64 * 24 = 3072 should match.
-        out_ch = 64
-        if size % (2 * out_ch) != 0:
+        if fam in fam_to_snap:
             continue
-        lag_modes = size // (2 * out_ch)
-        if lag_modes <= 0:
+        try:
+            _ = snap["blocks.0.A_lag.film_net.0.weight"]
+        except KeyError:
             continue
-        half = size // 2
-        gamma = bias[:half].reshape(out_ch, lag_modes)
-        beta  = bias[half:].reshape(out_ch, lag_modes)
-        im0 = axes[0].imshow(gamma, cmap="RdBu_r",
-                              vmin=-np.abs(gamma).max(), vmax=np.abs(gamma).max(), aspect="auto")
-        axes[0].set_title(r"FiLM $\gamma$ bias (out $\times$ mode)")
-        axes[0].set_xlabel("lag mode $m$")
-        axes[0].set_ylabel("output channel")
-        fig.colorbar(im0, ax=axes[0], fraction=0.046)
-        im1 = axes[1].imshow(beta, cmap="RdBu_r",
-                              vmin=-np.abs(beta).max(), vmax=np.abs(beta).max(), aspect="auto")
-        axes[1].set_title(r"FiLM $\beta$ bias (out $\times$ mode)")
-        axes[1].set_xlabel("lag mode $m$")
-        fig.colorbar(im1, ax=axes[1], fraction=0.046)
-        plotted = True
-        break
-    if not plotted:
-        plt.close(fig); return None
-    fig.suptitle("LEMO-PC FiLM modulation parameters (one representative cell)", fontsize=11)
-    fig.tight_layout()
+        vp = vizs.get((fam, reg, seed))
+        if vp is None or "input" not in vp:
+            continue
+        inp = vp["input"]
+        W0 = snap["blocks.0.A_lag.film_net.0.weight"]
+        params_dim = int(W0.shape[1])
+        try:
+            p_real = inp[:, 0, 0, 0, -params_dim:].astype(np.float32)
+        except Exception:
+            continue
+        if p_real.size == 0:
+            continue
+        fam_to_snap[fam] = snap
+        fam_to_params[fam] = p_real
+    fams_present = [f for f in FAMS if f in fam_to_snap]
+    if not fams_present:
+        return None
+    gammas = {}; betas = {}
+    for fam in fams_present:
+        g, b = _compute_film_per_family(fam_to_snap[fam], 0, fam_to_params[fam])
+        gammas[fam] = g.mean(axis=0)
+        betas[fam] = b.mean(axis=0)
+    g_max = max(np.abs(v).max() for v in gammas.values())
+    b_max = max(np.abs(v).max() for v in betas.values())
+    n = len(fams_present)
+    fig, axes = plt.subplots(2, n, figsize=(2.2 * n + 0.7, 4.4),
+                              sharex=True, sharey=True)
+    if n == 1:
+        axes = np.array([[axes[0]], [axes[1]]])
+    for j, fam in enumerate(fams_present):
+        ax_g = axes[0, j]; ax_b = axes[1, j]
+        ax_g.imshow(gammas[fam], cmap="RdBu_r", vmin=-g_max, vmax=g_max, aspect="auto")
+        ax_b.imshow(betas[fam],  cmap="RdBu_r", vmin=-b_max, vmax=b_max, aspect="auto")
+        ax_g.set_title(FAM_LABELS[fam], fontsize=10, pad=3)
+        if j == 0:
+            ax_g.set_ylabel(r"$\gamma$ (mult.)" + "\nout channel", fontsize=9)
+            ax_b.set_ylabel(r"$\beta$ (add.)" + "\nout channel", fontsize=9)
+        ax_b.set_xlabel(r"lag mode $m$", fontsize=9)
+    sm_g = plt.cm.ScalarMappable(cmap="RdBu_r",
+                                  norm=plt.Normalize(vmin=-g_max, vmax=g_max))
+    sm_b = plt.cm.ScalarMappable(cmap="RdBu_r",
+                                  norm=plt.Normalize(vmin=-b_max, vmax=b_max))
+    cb_g = fig.add_axes([0.965, 0.555, 0.012, 0.32])
+    cb_b = fig.add_axes([0.965, 0.135, 0.012, 0.32])
+    fig.colorbar(sm_g, cax=cb_g).ax.tick_params(labelsize=7)
+    fig.colorbar(sm_b, cax=cb_b).ax.tick_params(labelsize=7)
+    fig.suptitle("")
+    fig.subplots_adjust(top=0.90, bottom=0.13, left=0.08, right=0.94,
+                         hspace=0.30, wspace=0.18)
     out = FIG / "C22_film_gamma_beta_heatmap.pdf"
     fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out
 
@@ -926,7 +1348,7 @@ def c25_hardest_decile_jaccard():
             ax.text(j, i, f"{M[i,j]:.2f}", ha="center", va="center", fontsize=9, color="white")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046)
     cbar.set_label("Jaccard")
-    ax.set_title("Hardest-decile Jaccard between models", fontsize=10)
+    # title removed
     fig.tight_layout()
     out = FIG / "C25_hardest_decile_jaccard.pdf"
     fig.savefig(out, bbox_inches="tight")
@@ -986,7 +1408,7 @@ def c30_single_delay_heatmap():
                     color="white" if v > vmax * 0.5 else "black")
     cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
     cbar.set_label(r"test rel-$L_2$")
-    ax.set_title("Single-delay 2D leaderboard (mackey-glass / wright / hutchinson)",
+    # title removed
                  fontsize=11)
     fig.tight_layout()
     out = FIG / "C30_single_delay_heatmap.pdf"
@@ -1102,7 +1524,7 @@ def e3_apebench_residual_delta():
             ax.text(j, i, f"{v:+.0f}%", ha="center", va="center", fontsize=7)
     cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
     cbar.set_label(r"residual-anchor $\Delta$ rel-$L_2$ (\%)")
-    ax.set_title("APEBench: residual-anchor vs clean improvement", fontsize=10)
+    # title removed
     fig.tight_layout()
     out = FIG / "E3_apebench_residual_delta.pdf"
     fig.savefig(out, bbox_inches="tight")
@@ -1149,7 +1571,7 @@ def e9_scaling_burgers3d():
     ax.set_yscale("log")
     ax.set_xlabel("LEMO-PC width")
     ax.set_ylabel(r"test rel-$L_2$ on burgers\_3d")
-    ax.set_title("Width-scaling curve (LEMO-PC on burgers_3d)")
+    # title removed
     ax.grid(linestyle="--", alpha=0.4)
     fig.tight_layout()
     out = FIG / "E9_scaling_burgers3d.pdf"
@@ -1165,27 +1587,61 @@ def main():
     print("[phase2-figs] generating from extracted/pod1 + extracted/pod2")
     out_files = []
     for name, fn in [
-        ("F2 best-ckpt-epoch",        f2_best_ckpt_epoch),
+        # F2 dropped (2026-05-03) — best-ckpt-epoch histogram is a reviewer red
+        # flag (60% of LEMO-PC cells hit best at last epoch = potential under-
+        # training). Replaced with one sentence in the experimental setup
+        # section: "We train all models for 200 epochs; ~60% of LEMO-PC cells
+        # reach best validation at the last epoch, suggesting longer training
+        # would benefit all methods uniformly." Frames the limitation as
+        # cross-method-fair rather than LEMO-specific.
+        # ("F2 best-ckpt-epoch",        f2_best_ckpt_epoch),
         ("F4 kernel magnitude hist",   f4_kernel_magnitude_hist),
-        ("F5 FiLM distributions",      f5_film_distributions),
+        # F5 dropped (2026-05-03) — strictly worse version of the FiLM-
+        # nullification story that C22 tells. F5 was two histograms (FiLM
+        # weights + biases) both showing trivial delta-at-0 spikes; C22's
+        # per-family heatmap actually exposes the structure (or lack of it).
+        # Even after FiLM-fix retrain, C22 will carry more signal than F5's
+        # aggregate distributions.
+        # ("F5 FiLM distributions",      f5_film_distributions),
         ("A4 seed-wise box",           a4_seedwise_box),
         ("A6 calibration scatter",     a6_calibration_scatter),
         ("A7 residual histogram",      a7_residual_histogram),
-        ("A9 kernel heatmap",          a9_kernel_heatmap_per_family),
-        ("C8 seed-wise dotplot",       c8_seedwise_dotplot),
+        # A9 dropped — redundant with V05 (cosine-sim vs GT kernel) which carries
+        # the kernel-recovery story; raw spectrum heatmap added no extra signal.
+        # C8 dropped — seed-variance information now overlaid as jittered
+        # dots on A4 bars; standalone dotplot is redundant.
+        # ("C8 seed-wise dotplot",       c8_seedwise_dotplot),
         ("C13 params vs error",        c13_params_vs_error),
-        ("C14 wallclock vs error",     c14_wallclock_vs_error),
-        ("C15 param-eff Pareto",       c15_param_efficiency_pareto),
-        ("C16 wallclock Pareto",       c16_wallclock_pareto),
+        # C14 dropped — wall-clock data will live in a table once the offload
+        # sweep finishes (every cell records wall_seconds in test_results.json).
+        # C15 dropped — Pareto frontier scatter is redundant once Pareto line
+        # is removed from C13 (per design decision 2026-05-03).
+        # C16 dropped — same reasoning as C15 for the wall-clock axis.
+        # ("C14 wallclock vs error",     c14_wallclock_vs_error),
+        # ("C15 param-eff Pareto",       c15_param_efficiency_pareto),
+        # ("C16 wallclock Pareto",       c16_wallclock_pareto),
         ("C20 regime comparison",      c20_regime_comparison),
         ("C22 FiLM gamma/beta heatmap", c22_film_gamma_beta_heatmap),
-        ("C24 residual correlation",   c24_residual_correlation),
-        ("C25 hardest-decile Jaccard", c25_hardest_decile_jaccard),
-        ("C30 single-delay heatmap",   c30_single_delay_heatmap),
-        ("E1 APEBench leaderboard",    e1_apebench_leaderboard),
-        ("E2 APEBench residual lb",    e2_apebench_residual_leaderboard),
+        # C24 + C25 dropped — both collapse into T10_residual_agreement table
+        # (rows=models, cols=in-arch mean r / cross-arch mean r / Jaccard@10%)
+        # once the 372-cell offload sweep populates the model roster.
+        # ("C24 residual correlation",   c24_residual_correlation),
+        # ("C25 hardest-decile Jaccard", c25_hardest_decile_jaccard),
+        # C30 dropped — same data as T08_single_delay (now includes UNet);
+        # heatmap saturated above vmax=1.3 (Window-FNO/Wright values 1.86-1.98)
+        # and offered no story beyond the table.
+        # ("C30 single-delay heatmap",   c30_single_delay_heatmap),
+        # E1, E2, E9 dropped (2026-05-03) — APEBench is mis-fit per the
+        # Round 2.26 pivot to dist_*_rd_2d benchmarks. E1 is a 5x2 heatmap
+        # with only 2 models, E2 is a 4x1 single-column "leaderboard" of
+        # residual-anchor variants (no comparison axis, kolmogorov_2d
+        # blows up to 1.248), E9 width-scaling on burgers_3d is flat
+        # (0.180/0.179/0.182, anti-finding). Negative APEBench result
+        # lives in T_apebench_negative.tex; no figure needed.
+        # ("E1 APEBench leaderboard",    e1_apebench_leaderboard),
+        # ("E2 APEBench residual lb",    e2_apebench_residual_leaderboard),
         ("E3 APEBench delta",          e3_apebench_residual_delta),
-        ("E9 scaling burgers_3d",      e9_scaling_burgers3d),
+        # ("E9 scaling burgers_3d",      e9_scaling_burgers3d),
     ]:
         try:
             out = fn()
