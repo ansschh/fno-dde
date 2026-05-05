@@ -348,7 +348,7 @@ def fig05_training_curves(history_by_model: dict):
     """
     if not history_by_model:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.5 * len(FAMS), 3.8),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.6 * len(FAMS), 4.4),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
@@ -402,14 +402,17 @@ def fig05_training_curves(history_by_model: dict):
         if ax.get_visible():
             ax.set_xlim(left=1, right=100)
     if handles:
+        # Legend in two rows for breathing room with 12+ baselines.
+        n = len(handles)
+        ncol = max(1, (n + 1) // 2)
         fig.legend(handles, labels, loc="lower center",
-                    bbox_to_anchor=(0.5, -0.04),
-                    ncol=len(handles), frameon=False, fontsize=7.5,
-                    columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+                    bbox_to_anchor=(0.5, 0.01),
+                    ncol=ncol, frameon=False, fontsize=8.5,
+                    columnspacing=1.6, handlelength=1.8, handletextpad=0.6)
+    fig.subplots_adjust(left=0.06, right=0.99, top=0.97, bottom=0.22, wspace=0.10)
     out = FIG_DIR / "F05_training_curves.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=150)
     plt.close(fig)
     return out
 
@@ -426,7 +429,7 @@ def fig06_perframe_rollout():
     perframe = _discover_jsons("per_frame.json")
     if not perframe:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.5 * len(FAMS), 3.8),
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(3.6 * len(FAMS), 4.4),
                               sharey=True)
     if len(FAMS) == 1:
         axes = [axes]
@@ -514,11 +517,14 @@ def fig06_perframe_rollout():
         return None
     axes[0].set_ylabel(r"per-step rel$L_2$")
     if handles:
+        # Legend below: 2 rows so 12+ baselines fit without horizontal clipping.
+        n = len(handles)
+        ncol = max(1, (n + 1) // 2)
         fig.legend(handles, labels_seen, loc="lower center",
-                    bbox_to_anchor=(0.5, -0.04),
-                    ncol=len(handles), frameon=False, fontsize=7.5,
-                    columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+                    bbox_to_anchor=(0.5, 0.01),
+                    ncol=ncol, frameon=False, fontsize=8.5,
+                    columnspacing=1.6, handlelength=1.8, handletextpad=0.6)
+    fig.subplots_adjust(left=0.06, right=0.99, top=0.97, bottom=0.22, wspace=0.10)
     out = FIG_DIR / "F06_perframe_rollout.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)

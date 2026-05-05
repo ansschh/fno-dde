@@ -119,7 +119,7 @@ def main():
     axes[0].set_ylabel(r"$|\,\mathrm{LEMO}(\rho_k x) - \rho_k\,\mathrm{LEMO}(x)\,|$",
                          rotation=90, ha="center", va="center", fontsize=11,
                          labelpad=10)
-    fig.suptitle("Cyclic-shift equivariance", fontsize=14, y=1.0)
+    # title removed per user constraint
     out = FIG / "M4_equivariance_demo.pdf"
     fig.savefig(out, bbox_inches="tight")
     fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")

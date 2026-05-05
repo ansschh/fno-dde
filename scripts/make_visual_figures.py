@@ -292,7 +292,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
                                   transform=axes[2, j].transAxes,
                                   color="dimgrey", fontsize=12)
 
-    fig.suptitle("Predicted vs GT fields (hardest sample per family)",
+    fig.suptitle("",
                  fontsize=16, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     out = FIG / "V01_family_triptych.pdf"
@@ -363,7 +363,7 @@ def fig_v01_family_triptych(target_step: int = -1, hist_step: int = 0,
         cb.ax.tick_params(labelsize=8)
         cb.set_label(lbl, fontsize=9)
 
-    fig2.suptitle("Predictions on the hardest sample per family",
+    fig2.suptitle("",
                    fontsize=16, y=0.99)
     fig2.tight_layout(rect=[0, 0, 0.92, 0.96])
     out2 = FIG / "V01_family_triptych_diff.pdf"
@@ -546,7 +546,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                                     shrink=0.95, aspect=22)
                 cb.ax.tick_params(labelsize=8)
                 cb.set_label(lbl, fontsize=9)
-            figA.suptitle(f"Rollout: {FAM_LABELS[fam_pick]}  "
+            figA.suptitle("" if False else f"Rollout: {FAM_LABELS[fam_pick]}  "
                           f"(hardest sample, $\\ell_2$={l2_hard:.3f})",
                           fontsize=15, y=0.99)
             figA.tight_layout(rect=[0, 0, 1, 0.96])
