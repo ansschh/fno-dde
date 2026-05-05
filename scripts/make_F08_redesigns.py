@@ -71,24 +71,39 @@ MODEL_ORDER = list(MODEL_LABEL.keys())
 
 
 def discover(name):
+    """Discover equivariance JSON files, preferring fresh sources for lemo_pc_nd.
+
+    The post-A-fix re-eval (h100_pull, May 2026) uses cyclic_shift_full per the
+    T1 theorem. Older pulls used cyclic_shift_state_only and are stale. Sort
+    candidate paths so h100_pull / a_fix_runpod are seen first."""
     out = defaultdict(dict)
     seen = set()
+    candidates = []
     for r in (REPO / "extracted", REPO / "outputs"):
         if not r.exists():
             continue
         for p in r.rglob(name):
-            parts = p.parts
-            if len(parts) < 5:
-                continue
-            seed = parts[-2]; m = parts[-3]; reg = parts[-4]; fam = parts[-5]
-            key = (m, fam, reg, seed)
-            if key in seen:
-                continue
-            seen.add(key)
-            try:
-                out[m][(fam, reg, seed)] = json.loads(p.read_text())
-            except Exception:
-                pass
+            candidates.append(p)
+    # Prefer h100_pull / a_fix_runpod first (fresh full-roll equivariance).
+    def priority(p):
+        s = str(p).replace("\\", "/")
+        if "h100_pull" in s or "a_fix_runpod" in s:
+            return 0
+        return 1
+    candidates.sort(key=priority)
+    for p in candidates:
+        parts = p.parts
+        if len(parts) < 5:
+            continue
+        seed = parts[-2]; m = parts[-3]; reg = parts[-4]; fam = parts[-5]
+        key = (m, fam, reg, seed)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            out[m][(fam, reg, seed)] = json.loads(p.read_text())
+        except Exception:
+            pass
     return out
 
 
