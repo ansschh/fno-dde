@@ -111,6 +111,7 @@ class FiLMLagSpectralND(nn.Module):
         film_hidden: int = 64,
         sigma: Optional[float] = None,
         causal: bool = False,
+        zero_beta_above_dc: bool = True,
     ) -> None:
         super().__init__()
         self.in_channels = in_channels
@@ -119,6 +120,7 @@ class FiLMLagSpectralND(nn.Module):
         self.params_dim = params_dim
         self.sigma = sigma
         self.causal = causal
+        self.zero_beta_above_dc = bool(zero_beta_above_dc)
         scale = 1.0 / (in_channels * out_channels)
         if causal:
             # Time-domain causal FIR kernel of length `lag_modes`.
@@ -345,6 +347,7 @@ class LEMOPCNDBlock(nn.Module):
         film_hidden: int = 64,
         sigma: Optional[float] = None,
         causal: bool = False,
+        zero_beta_above_dc: bool = True,
     ) -> None:
         super().__init__()
         self.width = width
@@ -354,7 +357,8 @@ class LEMOPCNDBlock(nn.Module):
         self.B = nn.Conv1d(width, width, 1)  # 1×1 channel mix (lag-only conv)
         self.A_lag = FiLMLagSpectralND(width, width, lag_modes, params_dim,
                                         film_hidden=film_hidden, sigma=sigma,
-                                        causal=causal)
+                                        causal=causal,
+                                        zero_beta_above_dc=zero_beta_above_dc)
         if self.use_spatial:
             self.A_spat = SpatialFNOND(width, width,
                                         spatial_shape=spatial_shape,
@@ -408,6 +412,7 @@ class LEMOPCND(nn.Module):
         causal: bool = False,
         causal_smooth: bool = False,
         causal_smooth_K: Optional[int] = None,
+        zero_beta_above_dc: bool = True,
     ) -> None:
         super().__init__()
         self.in_channels = in_channels
@@ -421,6 +426,7 @@ class LEMOPCND(nn.Module):
         self.width = width
         self.causal = causal
         self.causal_smooth = causal_smooth
+        self.zero_beta_above_dc = bool(zero_beta_above_dc)
         if spatial_modes is None:
             spatial_modes = tuple(min(s // 2, 16) for s in self.spatial_shape)
         self.spatial_modes = tuple(spatial_modes)
@@ -431,6 +437,7 @@ class LEMOPCND(nn.Module):
                 width=width, lag_modes=lag_modes, params_dim=params_dim,
                 spatial_shape=self.spatial_shape, spatial_modes=self.spatial_modes,
                 film_hidden=film_hidden, sigma=sigma, causal=causal,
+                zero_beta_above_dc=self.zero_beta_above_dc,
             )
             for _ in range(n_layers)
         ])
@@ -523,6 +530,7 @@ def create_lemo_pc_nd(in_channels: int, out_channels: int, config: dict,
         causal=bool(model_cfg.get("causal", False)),
         causal_smooth=bool(model_cfg.get("causal_smooth", False)),
         causal_smooth_K=model_cfg.get("causal_smooth_K", None),
+        zero_beta_above_dc=bool(model_cfg.get("zero_beta_above_dc", True)),
     )
 
 
