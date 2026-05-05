@@ -397,7 +397,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
     from scipy.ndimage import zoom
     import matplotlib.patheffects as pe
     halo = pe.withStroke(linewidth=3.5, foreground="white")
-    UPSAMPLE = 32
+    UPSAMPLE = 64
 
     # Pre-load all 5 families (LEMO + FNO+FiLM) so both A and B have data.
     # For each family pick the HARDEST sample (highest LEMO-PC relL2 against GT
