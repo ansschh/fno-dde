@@ -246,6 +246,14 @@ class FiLMLagSpectralND(nn.Module):
         # FiLM output keeps gradient flow alive even when σ is not enforced.
         gamma = torch.tanh(gamma)
         beta = torch.tanh(beta)
+        # T1 equivariance: per-mode β added in spectral domain corresponds to
+        # IFFT(β)(t), a non-DC signal in time. That signal is NOT cyclic-shift
+        # invariant, so it breaks T1. With `zero_beta_above_dc=True` we keep
+        # only the DC (mode 0) component of β — this preserves a per-channel
+        # bias (still useful) while making the model exactly cyclic-equivariant.
+        # Set on the module via `model.set_zero_beta_above_dc(True)` at eval.
+        if getattr(self, "zero_beta_above_dc", False) and M > 1:
+            beta = torch.cat([beta[..., :1], torch.zeros_like(beta[..., 1:])], dim=-1)
         eff = min(eff_modes, M)
         # Broadcast gamma, beta across spatial axes.  Build the broadcasting
         # shape: (B, out, *[1]*n_spatial, modes).

@@ -185,7 +185,7 @@ def main():
     ax.set_yscale("log")
     ax.set_xlabel(r"rollout step $t$")
     ax.set_ylabel(r"$\|\hat u(t)\|_2$ (chain mean, flattened over spatial+channel)")
-    ax.grid(linestyle=":", alpha=0.4, which="both")
+    ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     ax.legend(handles=handles, labels=labels, loc="upper center",

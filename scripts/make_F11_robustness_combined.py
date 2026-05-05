@@ -164,7 +164,7 @@ def _plot_panel_band(ax, data, x_label, title):
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"test rel$L_2$")
     ax.set_title(title, fontsize=11)
-    ax.grid(linestyle=":", alpha=0.4, which="both")
+    ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     return handles
@@ -190,7 +190,7 @@ def _plot_panel_single_regime(ax, data, regime, x_label, title):
     if title:
         ax.text(0.5, 0.97, title, transform=ax.transAxes,
                 ha="center", va="top", fontsize=10, color="dimgrey")
-    ax.grid(linestyle=":", alpha=0.4, which="both")
+    ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     return handles
