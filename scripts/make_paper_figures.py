@@ -33,6 +33,11 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
+
+# Global Times New Roman style for all paper figures.
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _figstyle  # noqa: F401  (sets Times New Roman globally)
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -422,7 +427,6 @@ def fig06_perframe_rollout():
     so every memory-aware baseline (s4_nd, nide_nd, ndde_nd, memno_nd,
     ffno_nd, fno_film_nd, noneq_film_nd, causal_smooth_lemo_pc_nd, etc.)
     is auto-picked-up alongside the original cyclic-FFT models.
-    Naive copy baseline shown once per panel.
     """
     perframe = _discover_jsons("per_frame.json")
     if not perframe:
@@ -474,34 +478,6 @@ def fig06_perframe_rollout():
                 labels_seen.append(MODEL_LABELS.get(model, model))
             plotted_in_panel = True
             plotted_any = True
-        # Naive baseline: pull from any model's per_frame.json (the naive
-        # "copy last frame" curve does not depend on model architecture, so
-        # we dedupe by (fam, seed) across all models). Same zero-strip.
-        naive_curves = []
-        seen_naive = set()
-        for model in MODEL_ORDER:
-            cells = perframe.get(model, {})
-            for seed in SEEDS:
-                if (fam, seed) in seen_naive:
-                    continue
-                d = cells.get((fam, "clean", seed))
-                if d is None:
-                    continue
-                n = d.get("naive_rel_l2_per_step", [])
-                if n:
-                    arr = np.asarray(n, dtype=float)
-                    cut = _first_nonzero(arr)
-                    naive_curves.append(arr[cut:])
-                    seen_naive.add((fam, seed))
-        if naive_curves:
-            L = min(len(c) for c in naive_curves)
-            n_arr = np.stack([c[:L] for c in naive_curves], axis=0)
-            steps = np.arange(L)
-            line, = ax.plot(steps, n_arr.mean(axis=0), color="grey", lw=1.0,
-                             linestyle="--", label="naive copy")
-            if "naive copy" not in labels_seen:
-                handles.append(line)
-                labels_seen.append("naive copy")
         if not plotted_in_panel:
             ax.set_visible(False)
             continue
@@ -577,16 +553,29 @@ def fig08_equivariance_test():
 
     def _rows_for(model: str):
         rows = []  # (shift, err)
-        for cells in (sparse.get(model, {}), dense.get(model, {})):
-            for d in cells.values():
-                for key, v in d.items():
-                    m = re.match(r"equiv_shift_(\d+)_mean", key)
-                    if not m or v is None:
-                        continue
-                    try:
-                        rows.append((int(m.group(1)), float(v)))
-                    except (TypeError, ValueError):
-                        continue
+        # Dense format: {'shifts': [...], 'e_orbit': {'<k>': {'mean': ..., 'std': ...}, ...}}
+        for d in dense.get(model, {}).values():
+            e = d.get("e_orbit", {})
+            for k_str, stats in e.items():
+                if not isinstance(stats, dict):
+                    continue
+                v = stats.get("mean")
+                if v is None:
+                    continue
+                try:
+                    rows.append((int(k_str), float(v)))
+                except (TypeError, ValueError):
+                    continue
+        # Legacy sparse format: flat keys "equiv_shift_<k>_mean".
+        for d in sparse.get(model, {}).values():
+            for key, v in d.items():
+                m = re.match(r"equiv_shift_(\d+)_mean", key)
+                if not m or v is None:
+                    continue
+                try:
+                    rows.append((int(m.group(1)), float(v)))
+                except (TypeError, ValueError):
+                    continue
         return rows
 
     plotted_any = False

@@ -14,6 +14,11 @@ Usage:
     python3 scripts/make_T09_calibration_r2.py
 """
 from __future__ import annotations
+
+# Global Times New Roman style for all paper figures.
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _figstyle  # noqa: F401  (sets Times New Roman globally)
 import sys
 from pathlib import Path
 

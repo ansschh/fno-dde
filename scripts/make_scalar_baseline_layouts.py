@@ -13,6 +13,11 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Global Times New Roman style for all paper figures.
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _figstyle  # noqa: F401  (sets Times New Roman globally)
+
 REPO = Path(__file__).resolve().parent.parent
 FIG_DIR = (REPO.parent / "NeurIPS_LEMO" / "figures").resolve()
 FIG_DIR.mkdir(parents=True, exist_ok=True)
