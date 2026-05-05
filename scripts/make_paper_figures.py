@@ -609,7 +609,7 @@ def fig08_equivariance_test():
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16),
                ncol=len(handles), frameon=False, fontsize=7.5,
                columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    ax.grid(linestyle="--", alpha=0.4, which="both")
+    ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     fig.tight_layout()
