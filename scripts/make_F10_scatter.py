@@ -34,7 +34,6 @@ FAM_LETTER = {"dist_exp_rd_2d": "E", "dist_gaussian_rd_2d": "G",
 
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
-    "lemo_nd":                    "#ff7f0e",
     "causal_smooth_lemo_pc_nd":   "#c49c94",
     "lemo_bcorrect_nd":           "#bcbd22",
     "fno_nd":                     "#1f77b4",
@@ -51,7 +50,6 @@ MODEL_COLOR = {
 }
 MODEL_LABEL = {
     "lemo_pc_nd":                 "LEMO-PC",
-    "lemo_nd":                    "LEMO",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
     "lemo_bcorrect_nd":           "LEMO (b-correct)",
     "fno_nd":                     "FNO",

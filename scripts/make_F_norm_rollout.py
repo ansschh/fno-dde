@@ -36,7 +36,6 @@ TRAIN_T = 64
 
 MODEL_LABELS = {
     "lemo_pc_nd":                 "LEMO-PC",
-    "lemo_nd":                    "LEMO",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
     "lemo_bcorrect_nd":           "LEMO (b-correct, no σ)",
     "fno_nd":                     "FNO",
@@ -57,7 +56,6 @@ MODEL_ORDER = ["lemo_pc_nd", "lemo_bcorrect_nd", "fno_film_nd",
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
     "lemo_bcorrect_nd":           "#bcbd22",
-    "lemo_nd":                    "#ff7f0e",
     "causal_smooth_lemo_pc_nd":   "#c49c94",
     "fno_film_nd":                "#17becf",
     "noneq_film_nd":              "#c5b0d5",

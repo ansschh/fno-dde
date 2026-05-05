@@ -53,7 +53,6 @@ SEEDS = ["s42", "s123", "s456"]
 
 MODEL_LABELS = {
     "lemo_pc_nd":                 "LEMO-PC",
-    "lemo_nd":                    "LEMO",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
     "lemo_bcorrect_nd":           "LEMO-PC (b-correct)",
     "fno_nd":                     "FNO",
@@ -70,7 +69,6 @@ MODEL_LABELS = {
 }
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
-    "lemo_nd":                    "#ff7f0e",
     "causal_smooth_lemo_pc_nd":   "#c49c94",
     "lemo_bcorrect_nd":           "#bcbd22",
     "fno_nd":                     "#1f77b4",
@@ -86,7 +84,7 @@ MODEL_COLOR = {
     "unet_nd":                    "#7f7f7f",
 }
 MODEL_ORDER = [
-    "lemo_pc_nd", "lemo_nd", "causal_smooth_lemo_pc_nd",
+    "lemo_pc_nd", "causal_smooth_lemo_pc_nd",
     "fno_film_nd", "noneq_film_nd",
     "fno_nd", "markov_fno_nd", "windowed_fno_nd",
     "memno_nd", "ffno_nd", "s4_nd", "nide_nd", "ndde_nd",

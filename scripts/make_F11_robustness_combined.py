@@ -31,7 +31,6 @@ REGIME_LABEL = {"clean": "Clean", "lowres": "Low-res", "noisy": "Noisy"}
 
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
-    "lemo_nd":                    "#ff7f0e",
     "causal_smooth_lemo_pc_nd":   "#c49c94",
     "fno_nd":                     "#1f77b4",
     "fno_film_nd":                "#17becf",
@@ -47,7 +46,6 @@ MODEL_COLOR = {
 }
 MODEL_LABEL = {
     "lemo_pc_nd":                 "LEMO-PC",
-    "lemo_nd":                    "LEMO",
     "causal_smooth_lemo_pc_nd":   "LEMO-PC (causal)",
     "fno_nd":                     "FNO",
     "fno_film_nd":                "FNO+FiLM",
