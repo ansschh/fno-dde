@@ -234,9 +234,11 @@ def make_appendix(data_fgsm, data_noise):
         for h in h1 + h2:
             handles_all.setdefault(h.get_label(), h)
     axes[0, 0].set_ylabel("Worst-case (FGSM)\n" + r"test rel$L_2$",
-                          fontsize=10, fontweight="bold")
+                          fontsize=10, fontweight="normal",
+                          fontfamily="serif", fontname="Times New Roman")
     axes[1, 0].set_ylabel("Average-case (Gaussian)\n" + r"test rel$L_2$",
-                          fontsize=10, fontweight="bold")
+                          fontsize=10, fontweight="normal",
+                          fontfamily="serif", fontname="Times New Roman")
     for j in range(3):
         axes[0, j].set_xlabel("")
         axes[1, j].set_xlabel("")
