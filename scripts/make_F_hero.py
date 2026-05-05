@@ -148,16 +148,25 @@ def main():
 
     print(f"[F_hero] T={T} frames; showing t={t_show}")
 
-    # vmax computed from the LEMO-PC field at the last frame so structure is
-    # readable in the row that has it; the unconstrained row is shown at the
-    # SAME vmax so collapse / divergence is visually obvious by contrast.
-    last_lemo = p_lemo[0, T - 1, ..., 0]
-    vmax = float(np.max(np.abs(last_lemo)) * 1.05)
+    # Per-row vmax: each row uses the maximum absolute value of its own
+    # frames, so neither row washes out under a shared scale. The σ-projection
+    # story is visible from norm annotations + structural features.
+    unc_frames = np.stack([p_unc[0, t, ..., 0] for t in t_show], axis=0)
+    lemo_frames = np.stack([p_lemo[0, t, ..., 0] for t in t_show], axis=0)
+    vmax_unc = float(np.max(np.abs(unc_frames)) * 1.02)
+    vmax_lemo = float(np.max(np.abs(lemo_frames)) * 1.02)
+
+    # sqrt-scaled diverging norm so small structure remains visible.
+    from matplotlib.colors import FuncNorm
+    def _signed_sqrt(v):
+        fwd = lambda x: np.sign(x) * np.power(np.abs(x), 0.5)
+        inv = lambda x: np.sign(x) * np.power(np.abs(x), 2.0)
+        return FuncNorm((fwd, inv), vmin=-v, vmax=v)
 
     n_cols = len(t_show)
-    # 3 rows: GT, unconstrained, LEMO-PC
-    fig, axes = plt.subplots(3, n_cols, figsize=(3.6 * n_cols, 10.2),
-                              gridspec_kw={"wspace": 0.04, "hspace": 0.06})
+    # 2 rows: unconstrained vs LEMO-PC. GT row dropped (extrapolation cells empty).
+    fig, axes = plt.subplots(2, n_cols, figsize=(3.6 * n_cols, 6.8),
+                              gridspec_kw={"wspace": 0.04, "hspace": 0.10})
 
     label_unc = unc_key[0].replace("_nd", "").replace("_", " ").upper()
     if "lemo_bcorrect" in unc_key[0]:
@@ -165,34 +174,28 @@ def main():
     elif "noneq_film" in unc_key[0]:
         label_unc = "Non-equivariant + FiLM"
 
+    from scipy.ndimage import zoom as _zoom
+
+    def _draw(ax, field, vmax):
+        f_hi = _zoom(field, UPSAMPLE, order=3)
+        H, W = field.shape
+        extent = [-0.5, W - 0.5, H - 0.5, -0.5]
+        ax.imshow(f_hi, cmap=PASTEL_DIV, norm=_signed_sqrt(vmax),
+                  interpolation="bilinear", extent=extent)
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_linewidth(0.6)
+
     gt_t = target.shape[1]
     for j, t in enumerate(t_show):
-        ax_gt = axes[0, j]
-        ax_unc = axes[1, j]
-        ax_lemo = axes[2, j]
-        # Row 0: ground truth (only available up to gt_t)
-        if t < gt_t:
-            f_gt = target[0, t, ..., 0]
-            _heatmap(ax_gt, f_gt, vmax)
-            n_gt = float(np.linalg.norm(f_gt))
-            ax_gt.text(0.02, 0.98, f"$\\|u\\|={n_gt:.1f}$",
-                        transform=ax_gt.transAxes, ha="left", va="top",
-                        fontsize=9, color="black",
-                        bbox=dict(boxstyle="round,pad=0.2",
-                                  facecolor="white", edgecolor="none", alpha=0.7))
-        else:
-            ax_gt.text(0.5, 0.5, "(beyond GT horizon)",
-                        transform=ax_gt.transAxes, ha="center", va="center",
-                        fontsize=10, color="dimgrey")
-            ax_gt.set_xticks([]); ax_gt.set_yticks([])
-            for sp in ax_gt.spines.values():
-                sp.set_linewidth(0.6)
+        ax_unc = axes[0, j]
+        ax_lemo = axes[1, j]
 
-        # Row 1: unconstrained
+        # Row 0: unconstrained
         f_unc = p_unc[0, t, ..., 0]
-        _heatmap(ax_unc, f_unc, vmax)
+        _draw(ax_unc, f_unc, vmax_unc)
         if t < gt_t:
-            _overlay_contours(ax_unc, target[0, t, ..., 0], vmax)
+            _overlay_contours(ax_unc, target[0, t, ..., 0], vmax_unc)
         n_unc = float(np.linalg.norm(f_unc))
         ax_unc.text(0.02, 0.98, f"$\\|\\hat u\\|={n_unc:.1f}$",
                      transform=ax_unc.transAxes, ha="left", va="top",
@@ -200,11 +203,11 @@ def main():
                      bbox=dict(boxstyle="round,pad=0.2",
                                facecolor="white", edgecolor="none", alpha=0.7))
 
-        # Row 2: LEMO-PC
+        # Row 1: LEMO-PC
         f_lemo = p_lemo[0, t, ..., 0]
-        _heatmap(ax_lemo, f_lemo, vmax)
+        _draw(ax_lemo, f_lemo, vmax_lemo)
         if t < gt_t:
-            _overlay_contours(ax_lemo, target[0, t, ..., 0], vmax)
+            _overlay_contours(ax_lemo, target[0, t, ..., 0], vmax_lemo)
         n_lemo = float(np.linalg.norm(f_lemo))
         ax_lemo.text(0.02, 0.98, f"$\\|\\hat u\\|={n_lemo:.1f}$",
                       transform=ax_lemo.transAxes, ha="left", va="top",
@@ -213,18 +216,19 @@ def main():
                                 facecolor="white", edgecolor="none", alpha=0.7))
 
         # Per-column time label at top
-        ax_gt.text(0.5, 1.04,
-                    f"$t={t}$" + (" (end of training)" if t == TRAIN_T else
-                                  "" if t < gt_t else " (extrapolation)"),
-                    transform=ax_gt.transAxes, ha="center", va="bottom",
+        suffix = ""
+        if t == TRAIN_T:
+            suffix = " (end of training)"
+        elif t > gt_t:
+            suffix = " (extrapolation)"
+        ax_unc.text(0.5, 1.04, f"$t={t}${suffix}",
+                    transform=ax_unc.transAxes, ha="center", va="bottom",
                     fontsize=10, color="dimgrey")
 
     # Row labels on the left margin
-    axes[0, 0].set_ylabel("Ground truth", fontsize=11, rotation=90, labelpad=10,
+    axes[0, 0].set_ylabel(label_unc, fontsize=11, rotation=90, labelpad=10,
                           color="black", fontweight="bold")
-    axes[1, 0].set_ylabel(label_unc, fontsize=11, rotation=90, labelpad=10,
-                          color="black", fontweight="bold")
-    axes[2, 0].set_ylabel(r"LEMO-PC ($\sigma$-projected)", fontsize=11, rotation=90,
+    axes[1, 0].set_ylabel(r"LEMO-PC ($\sigma$-projected)", fontsize=11, rotation=90,
                           labelpad=10, color="black", fontweight="bold")
 
     fig.subplots_adjust(left=0.06, right=0.99, top=0.96, bottom=0.02)
