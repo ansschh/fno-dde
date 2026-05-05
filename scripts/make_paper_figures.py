@@ -491,13 +491,11 @@ def fig06_perframe_rollout():
         return None
     axes[0].set_ylabel(r"per-step rel$L_2$")
     if handles:
-        # Legend below: 2 rows so 12+ baselines fit without horizontal clipping.
-        n = len(handles)
-        ncol = max(1, (n + 1) // 2)
+        # Single-row legend: all baselines on one line.
         fig.legend(handles, labels_seen, loc="lower center",
                     bbox_to_anchor=(0.5, 0.01),
-                    ncol=ncol, frameon=False, fontsize=8.5,
-                    columnspacing=1.6, handlelength=1.8, handletextpad=0.6)
+                    ncol=len(handles), frameon=False, fontsize=8.5,
+                    columnspacing=1.4, handlelength=1.6, handletextpad=0.5)
     fig.subplots_adjust(left=0.06, right=0.99, top=0.97, bottom=0.22, wspace=0.10)
     out = FIG_DIR / "F06_perframe_rollout.pdf"
     fig.savefig(out)
