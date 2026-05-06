@@ -579,9 +579,7 @@ def fig_v02_rollout_sequence(fam_pick="dist_gaussian_rd_2d",
                 _overlay_gt_contours(axB[i, j], y[t, ..., 0], cell_vmax)
             axB[i, 0].set_ylabel(FAM_LABELS[fam], fontsize=12, rotation=0,
                                    ha="right", va="center", labelpad=12)
-        figB.suptitle("Error Difference grid (rollout Ã— family)",
-                       fontsize=16, y=0.995)
-        figB.tight_layout(rect=[0, 0, 1, 0.97])
+        figB.tight_layout()
         outB = FIG / "V02_rollout_grid.pdf"
         figB.savefig(outB, bbox_inches="tight")
         figB.savefig(outB.with_suffix(".png"), dpi=300, bbox_inches="tight")
@@ -788,43 +786,60 @@ def fig_v06_residual_fft():
     if not series:
         return None
 
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.5, 4.0),
-                                     gridspec_kw={"wspace": 0.25})
+    # Saturated tab10 colors per family + big-text styling.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    FAM_COLOR = {
+        "dist_exp_rd_2d":      "#d62728",
+        "dist_gaussian_rd_2d": "#1f77b4",
+        "dist_gamma_rd_2d":    "#2ca02c",
+        "dist_uniform_rd_2d":  "#ff7f0e",
+        "dist_powerlaw_rd_2d": "#9467bd",
+    }
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(22.0, 11.0),
+                                     gridspec_kw={"wspace": 0.18})
     for fam in FAMS:
         if fam not in series: continue
         e = np.array(series[fam])
         m = e.mean(axis=0)
-        s = e.std(axis=0)
         modes = np.arange(len(m))
-        axL.plot(modes, m, lw=1.6, label=FAM_LABELS[fam])
-        axL.fill_between(modes, np.maximum(m - s, 1e-3), m + s,
-                          alpha=0.15, lw=0)
+        c = FAM_COLOR.get(fam, "#888")
+        axL.plot(modes, m, lw=4.0, color=c, solid_capstyle="round",
+                  label=FAM_LABELS[fam])
         cumulative = np.cumsum(m)
         cumulative /= cumulative[-1]
-        axR.plot(modes, cumulative * 100, lw=1.6, label=FAM_LABELS[fam])
+        axR.plot(modes, cumulative * 100, lw=4.0, color=c,
+                  solid_capstyle="round", label=FAM_LABELS[fam])
 
     axL.set_yscale("log")
-    axL.set_xlabel("spectral lag mode $m$")
-    axL.set_ylabel(r"$\mathbb{E}\,|\hat{r}_m|^2$")
-    axL.set_title("Per-mode residual energy", fontsize=11)
-    axL.grid(linestyle=":", alpha=0.5, which="both")
+    axL.set_xlabel(r"spectral lag mode $m$", fontsize=AXIS_FS)
+    axL.set_ylabel(r"$\mathbb{E}\,|\hat{r}_m|^2$", fontsize=AXIS_FS)
+    axL.tick_params(axis="both", labelsize=TICK_FS)
+    axL.grid(True, which="major", linestyle="-", color="grey",
+              alpha=0.18, linewidth=0.6)
+    axL.set_axisbelow(True)
     for sp in ("top", "right"): axL.spines[sp].set_visible(False)
 
-    axR.axvline(24, color="black", linestyle="--", lw=1.0, alpha=0.7)
-    axR.set_xlabel("modes retained $M$")
-    axR.set_ylabel("% of total residual energy")
-    axR.set_title("Cumulative energy capture", fontsize=11)
+    axR.axvline(24, color="black", linestyle="--", lw=2.0, alpha=0.7)
+    axR.set_xlabel(r"modes retained $M$", fontsize=AXIS_FS)
+    axR.set_ylabel(r"% of total residual energy", fontsize=AXIS_FS)
+    axR.tick_params(axis="both", labelsize=TICK_FS)
     axR.set_ylim(0, 105)
-    axR.grid(linestyle=":", alpha=0.5)
+    axR.grid(True, which="major", linestyle="-", color="grey",
+              alpha=0.18, linewidth=0.6)
+    axR.set_axisbelow(True)
     for sp in ("top", "right"): axR.spines[sp].set_visible(False)
 
-    axL.legend(loc="upper right", fontsize=9, frameon=False, ncol=1)
-    fig.suptitle("Residual spectrum and truncation justification",
-                  fontsize=12, y=1.01)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    handles, labels = axL.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center",
+                bbox_to_anchor=(0.5, 0.0), ncol=len(handles),
+                fontsize=LEGEND_FS, frameon=False,
+                columnspacing=1.6, handlelength=1.4, handletextpad=0.4)
+    fig.subplots_adjust(left=0.07, right=0.99, top=0.97, bottom=0.20,
+                          wspace=0.18)
     out = FIG / "V06_residual_fft.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=200, bbox_inches="tight")
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".png"), dpi=200,
+                  bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     return out
 

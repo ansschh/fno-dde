@@ -39,18 +39,18 @@ FAM_LETTER = {"dist_exp_rd_2d": "E", "dist_gaussian_rd_2d": "G",
 
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
-    "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "causal_smooth_lemo_pc_nd":   "#ff7f0e",
     "lemo_bcorrect_nd":           "#bcbd22",
     "fno_nd":                     "#1f77b4",
     "fno_film_nd":                "#17becf",
-    "noneq_film_nd":              "#c5b0d5",
+    "noneq_film_nd":              "#9467bd",
     "markov_fno_nd":              "#2ca02c",
     "windowed_fno_nd":            "#9467bd",
     "ffno_nd":                    "#8c564b",
     "memno_nd":                   "#e377c2",
     "s4_nd":                      "#bcbd22",
-    "nide_nd":                    "#aec7e8",
-    "ndde_nd":                    "#98df8a",
+    "nide_nd":                    "#008080",
+    "ndde_nd":                    "#2ca02c",
     "unet_nd":                    "#7f7f7f",
 }
 MODEL_LABEL = {
@@ -135,7 +135,9 @@ def main():
     lo = max(min(all_x + all_y) * 0.7, 1e-3)
     hi = max(all_x + all_y) * 1.6
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 5.0),
+    # Big-text styling consistent with F08/F11/F06.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    fig, axes = plt.subplots(1, 3, figsize=(28.0, 11.0),
                               sharex=True, sharey=True)
 
     all_models = set()
@@ -144,7 +146,7 @@ def main():
 
     for ax, (reg, reg_label) in zip(axes, regimes):
         data = data_by_regime[reg]
-        ax.plot([lo, hi], [lo, hi], "--", color="grey", lw=0.8, zorder=0)
+        ax.plot([lo, hi], [lo, hi], "--", color="grey", lw=1.4, zorder=0)
         for model, by_fam in data.items():
             color = MODEL_COLOR.get(model, "#888")
             for fam in FAMS:
@@ -154,49 +156,43 @@ def main():
                 ind = np.array([c[0] for c in cells])
                 ood = np.array([c[1] for c in cells])
                 x_mean, y_mean = ind.mean(), ood.mean()
-                ax.errorbar(x_mean, y_mean,
-                            xerr=ind.std() if len(ind) > 1 else 0,
-                            yerr=ood.std() if len(ood) > 1 else 0,
-                            fmt="o", color=color, mfc=color, mec="black",
-                            mew=0.6, ms=18, lw=0.9, capsize=2,
-                            alpha=0.95, zorder=3)
+                ax.scatter(x_mean, y_mean, color=color, edgecolor="black",
+                            s=400, linewidth=1.0, alpha=0.95, zorder=3)
                 ax.text(x_mean, y_mean, FAM_LETTER[fam],
                         ha="center", va="center",
-                        fontsize=9, fontweight="bold", color="white",
+                        fontsize=18, fontweight="bold", color="white",
                         zorder=4)
         ax.set_xscale("log"); ax.set_yscale("log")
         ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
-        ax.set_xlabel(r"in-distribution rel$L_2$")
-        ax.text(0.5, 0.97, reg_label, transform=ax.transAxes,
-                ha="center", va="top", fontsize=10, color="black")
-        ax.grid(linestyle=":", alpha=0.4, which="both")
+        ax.set_xlabel(r"in-distribution rel-$L_2$", fontsize=AXIS_FS)
+        ax.set_title(reg_label, fontsize=TITLE_FS, pad=10)
+        ax.tick_params(axis="both", labelsize=TICK_FS)
+        ax.grid(True, which="major", linestyle="-", color="grey",
+                 alpha=0.18, linewidth=0.6)
+        ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
-    axes[0].set_ylabel(r"mean OOD rel$L_2$")
+    axes[0].set_ylabel(r"mean OOD rel-$L_2$", fontsize=AXIS_FS)
 
-    # Single-row model-color legend at bottom.
     model_handles = [plt.Line2D([0],[0], marker="o", color="w",
-                                  mfc=MODEL_COLOR[m], mec="black", mew=0.6,
-                                  ms=9, label=MODEL_LABEL[m])
+                                  mfc=MODEL_COLOR[m], mec="black", mew=0.8,
+                                  ms=18, label=MODEL_LABEL[m])
                      for m in MODEL_COLOR if m in all_models]
-    fam_legend_text = "Trained on:  " + "   ".join(
-        f"{FAM_LETTER[f]}={FAM_LABEL[f]}" for f in FAMS)
-
+    n = len(model_handles)
+    ncol = 4 if n >= 8 else (3 if n >= 5 else max(1, n))
     fig.legend(handles=model_handles, loc="lower center",
-               bbox_to_anchor=(0.5, -0.04),
-               fontsize=7.5, frameon=False,
-               ncol=len(model_handles),
-               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.text(0.98, 0.005, fam_legend_text, fontsize=8, color="black",
-             ha="right", va="bottom")
-
-    fig.suptitle("",
-                 fontsize=12, y=1.01)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+               bbox_to_anchor=(0.5, 0.0),
+               fontsize=LEGEND_FS, frameon=False,
+               ncol=ncol,
+               columnspacing=1.6, handlelength=1.4, handletextpad=0.4)
+    rows = int(np.ceil(n / ncol))
+    bot = 0.06 + 0.07 * rows
+    fig.subplots_adjust(left=0.05, right=0.99, top=0.92, bottom=bot,
+                          wspace=0.10)
 
     out = FIG_DIR / "F10_cross_family_scatter.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(out, dpi=150, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     print(f"-> {out.name}")
     print(f"   models present: {sorted(all_models)}")

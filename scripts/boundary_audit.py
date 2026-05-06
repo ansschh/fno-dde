@@ -37,17 +37,17 @@ FAMS = ["dist_exp_rd_2d", "dist_gaussian_rd_2d", "dist_gamma_rd_2d",
 
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
-    "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "causal_smooth_lemo_pc_nd":   "#ff7f0e",
     "fno_nd":                     "#1f77b4",
     "fno_film_nd":                "#17becf",
-    "noneq_film_nd":              "#c5b0d5",
+    "noneq_film_nd":              "#9467bd",
     "markov_fno_nd":              "#2ca02c",
     "windowed_fno_nd":            "#9467bd",
     "ffno_nd":                    "#8c564b",
     "memno_nd":                   "#e377c2",
     "s4_nd":                      "#bcbd22",
-    "nide_nd":                    "#aec7e8",
-    "ndde_nd":                    "#98df8a",
+    "nide_nd":                    "#008080",
+    "ndde_nd":                    "#2ca02c",
     "unet_nd":                    "#7f7f7f",
 }
 MODEL_LABEL = {
@@ -178,7 +178,9 @@ def main():
             "std":   np.array(d["std_per_t"]),
         })
 
-    fig, axes = plt.subplots(1, 2, figsize=(8.5, 4.0), sharey=True,
+    # Big-text styling consistent with F08/F11/F06.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    fig, axes = plt.subplots(1, 2, figsize=(28.0, 11.0), sharey=True,
                               gridspec_kw={"wspace": 0.06})
     ax_left, ax_right = axes
     ts_full = np.arange(T)
@@ -189,36 +191,38 @@ def main():
     for ax, sl, xlim, _name in panels:
         ts = ts_full[sl]
         for p in plotted:
-            ax.plot(ts, p["mean"][sl], color=p["color"], lw=1.8, label=p["label"])
-            ax.fill_between(ts,
-                             np.maximum(p["mean"][sl] - p["std"][sl], 1e-5),
-                             p["mean"][sl] + p["std"][sl],
-                             color=p["color"], alpha=0.15, linewidth=0)
+            ax.plot(ts, p["mean"][sl], color=p["color"], lw=4.0,
+                     solid_capstyle="round", label=p["label"])
         ax.set_xlim(*xlim)
         ax.set_yscale("log")
-        ax.set_xlabel("rollout step $t$")
-        ax.grid(linestyle=":", alpha=0.4, which="both")
+        ax.set_xlabel(r"rollout step $t$", fontsize=AXIS_FS)
+        ax.tick_params(axis="both", labelsize=TICK_FS)
+        ax.grid(True, which="major", linestyle="-", color="grey",
+                 alpha=0.18, linewidth=0.6)
+        ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
 
-    # Boundary shading on each panel (only the band that falls within view).
-    ax_left.axvspan(-0.5, B - 0.5, color="grey", alpha=0.13, lw=0,
-                     label=f"boundary (t<{B} or t≥T-{B})")
-    ax_right.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.13, lw=0)
+    ax_left.axvspan(-0.5, B - 0.5, color="grey", alpha=0.20, lw=0,
+                     label=f"boundary")
+    ax_right.axvspan(T - B - 0.5, T - 0.5, color="grey", alpha=0.20, lw=0)
 
-    ax_left.set_ylabel(r"rel-$L_2$ (mean over cells)")
+    ax_left.set_ylabel(r"rel-$L_2$ (mean over cells)", fontsize=AXIS_FS)
 
-    # Single-row legend below the panels.
     handles, labels = ax_left.get_legend_handles_labels()
+    n = len(handles)
+    ncol = 3 if n >= 7 else (2 if n >= 4 else max(1, n))
     fig.legend(handles, labels, loc="lower center",
-                bbox_to_anchor=(0.5, -0.02), ncol=len(handles),
-                fontsize=7.5, frameon=False,
-                columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    fig.subplots_adjust(top=0.92, bottom=0.20, left=0.10, right=0.98,
+                bbox_to_anchor=(0.5, 0.0), ncol=ncol,
+                fontsize=LEGEND_FS, frameon=False,
+                columnspacing=1.6, handlelength=1.4, handletextpad=0.4)
+    rows = int(np.ceil(n / ncol))
+    bot = 0.18 + 0.08 * rows
+    fig.subplots_adjust(top=0.95, bottom=bot, left=0.06, right=0.99,
                          wspace=0.06)
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_FIG, bbox_inches="tight")
-    fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(OUT_FIG)
+    fig.savefig(str(OUT_FIG).replace(".pdf", ".png"), dpi=150)
     plt.close(fig)
     print(f"Wrote {OUT_FIG}")
 

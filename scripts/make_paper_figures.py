@@ -72,7 +72,7 @@ MODEL_LABELS = {
     "unet_nd":                    "UNet",
 }
 MODEL_ORDER = [
-    "lemo_pc_nd", "causal_smooth_lemo_pc_nd",
+    "lemo_pc_nd", "causal_smooth_lemo_pc_nd", "lemo_bcorrect_nd",
     "fno_film_nd", "noneq_film_nd",
     "fno_nd", "markov_fno_nd", "windowed_fno_nd",
     "memno_nd", "ffno_nd", "s4_nd", "nide_nd", "ndde_nd",
@@ -80,18 +80,18 @@ MODEL_ORDER = [
 ]
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",  # red
-    "causal_smooth_lemo_pc_nd":   "#c49c94",  # taupe
+    "causal_smooth_lemo_pc_nd":   "#ff7f0e",  # taupe
     "lemo_bcorrect_nd":           "#bcbd22",  # olive (rarely shown)
     "fno_nd":                     "#1f77b4",  # blue
     "fno_film_nd":                "#17becf",  # cyan
-    "noneq_film_nd":              "#c5b0d5",  # lavender
+    "noneq_film_nd":              "#9467bd",  # lavender
     "markov_fno_nd":              "#2ca02c",  # green
     "windowed_fno_nd":            "#9467bd",  # purple
     "memno_nd":                   "#e377c2",  # pink
     "ffno_nd":                    "#8c564b",  # brown
     "s4_nd":                      "#bcbd22",  # olive
-    "nide_nd":                    "#aec7e8",  # light blue
-    "ndde_nd":                    "#98df8a",  # light green
+    "nide_nd":                    "#008080",  # light blue
+    "ndde_nd":                    "#2ca02c",  # light green
     "unet_nd":                    "#7f7f7f",  # gray
 }
 
@@ -362,8 +362,12 @@ def fig05_training_curves(history_by_model: dict):
     """
     if not history_by_model:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(4.2 * len(FAMS), 6.4),
+    # Match F08/F11/F06 styling: 42pt titles/legend, 38pt axis, 36pt ticks.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(6.0 * len(FAMS), 8.0),
                               sharey=True)
+    for ax in axes:
+        ax.set_box_aspect(1)
     if len(FAMS) == 1:
         axes = [axes]
     handles, labels = [], []
@@ -388,13 +392,9 @@ def fig05_training_curves(history_by_model: dict):
             curves = np.stack([c[:L] for c in curves], axis=0)
             epochs = np.arange(1, L + 1)
             color = MODEL_COLOR.get(model, "#888888")
-            line, = ax.plot(epochs, curves.mean(axis=0), color=color, lw=1.4,
+            line, = ax.plot(epochs, curves.mean(axis=0), color=color, lw=4.0,
+                             solid_capstyle="round",
                              label=MODEL_LABELS.get(model, model))
-            if curves.shape[0] > 1:
-                ax.fill_between(epochs,
-                                 curves.mean(axis=0) - curves.std(axis=0),
-                                 curves.mean(axis=0) + curves.std(axis=0),
-                                 color=color, alpha=0.18, linewidth=0)
             if MODEL_LABELS.get(model, model) not in labels:
                 handles.append(line)
                 labels.append(MODEL_LABELS.get(model, model))
@@ -404,34 +404,38 @@ def fig05_training_curves(history_by_model: dict):
             ax.set_visible(False)
             continue
         ax.set_yscale("log")
-        ax.set_xlabel("epoch")
-        ax.set_title(FAM_LABELS[fam], color="black", pad=8)
-        ax.grid(False)
+        ax.set_title(FAM_LABELS[fam], color="black", pad=10, fontsize=TITLE_FS)
+        ax.tick_params(axis="both", labelsize=TICK_FS)
+        ax.grid(True, which="major", linestyle="-", color="grey",
+             alpha=0.18, linewidth=0.6)
+        ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
     if not plotted_any:
         plt.close(fig)
         return None
-    axes[0].set_ylabel(r"Validation rel-$L_2$", fontweight="bold")
-    # User constraint: clip x-axis to first 100 epochs.
+    middle = len(FAMS) // 2
+    axes[middle].set_xlabel("epoch", fontsize=AXIS_FS)
+    axes[0].set_ylabel(r"Validation rel-$L_2$", fontsize=AXIS_FS)
     for ax in axes:
         if ax.get_visible():
             ax.set_xlim(left=1, right=100)
     if handles:
         n = len(handles)
-        ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
+        ncol = 4 if n >= 8 else (3 if n >= 5 else max(1, n))
         fig.legend(handles, labels, loc="lower center",
                     bbox_to_anchor=(0.5, 0.0),
-                    ncol=ncol, frameon=False,
-                    columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
+                    ncol=ncol, frameon=False, fontsize=LEGEND_FS,
+                    columnspacing=1.6, handlelength=1.4, handletextpad=0.4)
         rows = int(np.ceil(n / ncol))
-        bot = 0.16 + 0.06 * rows
+        bot = 0.22 + 0.10 * rows
     else:
-        bot = 0.16
-    fig.subplots_adjust(left=0.06, right=0.99, top=0.93, bottom=bot, wspace=0.10)
+        bot = 0.24
+    fig.subplots_adjust(left=0.04, right=0.998, top=0.92, bottom=bot, wspace=0.10)
     out = FIG_DIR / "F05_training_curves.pdf"
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".png"), dpi=150,
+                  bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     return out
 
@@ -447,8 +451,13 @@ def fig06_perframe_rollout():
     perframe = _discover_jsons("per_frame.json")
     if not perframe:
         return None
-    fig, axes = plt.subplots(1, len(FAMS), figsize=(4.2 * len(FAMS), 6.4),
+    # Match F11_robustness_appendix sizing: 42pt titles/legend, 38pt axis, 36pt ticks.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    # Square panels tiling the full width (no left/right whitespace).
+    fig, axes = plt.subplots(1, len(FAMS), figsize=(6.6 * len(FAMS), 7.5),
                               sharey=True)
+    for ax in axes:
+        ax.set_box_aspect(1)
     if len(FAMS) == 1:
         axes = [axes]
     # Strip leading "history" zeros: rel_l2_per_step pads the history portion
@@ -482,13 +491,10 @@ def fig06_perframe_rollout():
             c_arr = np.stack([c[:L] for c in curves], axis=0)
             steps = np.arange(L)
             color = MODEL_COLOR.get(model, "#888888")
-            line, = ax.plot(steps, c_arr.mean(axis=0), color=color, lw=1.4,
+            mean = c_arr.mean(axis=0)
+            line, = ax.plot(steps, mean, color=color, lw=4.5,
+                             solid_capstyle="round",
                              label=MODEL_LABELS.get(model, model))
-            if c_arr.shape[0] > 1:
-                ax.fill_between(steps,
-                                 c_arr.mean(axis=0) - c_arr.std(axis=0),
-                                 c_arr.mean(axis=0) + c_arr.std(axis=0),
-                                 color=color, alpha=0.18, linewidth=0)
             if MODEL_LABELS.get(model, model) not in labels_seen:
                 handles.append(line)
                 labels_seen.append(MODEL_LABELS.get(model, model))
@@ -498,30 +504,36 @@ def fig06_perframe_rollout():
             ax.set_visible(False)
             continue
         ax.set_yscale("log")
-        ax.set_xlabel("future rollout step $t$")
-        ax.set_title(FAM_LABELS[fam], pad=8)
-        ax.grid(False)
+        ax.set_xlabel("")  # cleared per-panel; one shared xlabel below
+        ax.set_title(FAM_LABELS[fam], pad=10, fontsize=TITLE_FS)
+        ax.tick_params(axis="both", labelsize=TICK_FS)
+        ax.grid(True, which="major", linestyle="-", color="grey", alpha=0.18, linewidth=0.6)
+        ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
     if not plotted_any:
         plt.close(fig)
         return None
-    axes[0].set_ylabel(r"per-step rel-$L_2$", fontweight="bold")
+    # One shared xlabel on the middle panel — avoids the overlap when each
+    # of the 5 panels prints "future rollout step t" individually.
+    middle = len(FAMS) // 2
+    axes[middle].set_xlabel(r"future rollout step $t$", fontsize=AXIS_FS)
+    axes[0].set_ylabel(r"per-step rel-$L_2$", fontsize=AXIS_FS)
     if handles:
         n = len(handles)
-        ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
+        # Single-row legend per user request.
         fig.legend(handles, labels_seen, loc="lower center",
                     bbox_to_anchor=(0.5, 0.0),
-                    ncol=ncol, frameon=False,
-                    columnspacing=1.6, handlelength=1.6, handletextpad=0.5)
-        rows = int(np.ceil(n / ncol))
-        bot = 0.16 + 0.06 * rows
+                    ncol=n, frameon=False, fontsize=LEGEND_FS,
+                    columnspacing=1.4, handlelength=1.4, handletextpad=0.4)
+        bot = 0.32
     else:
-        bot = 0.16
-    fig.subplots_adjust(left=0.05, right=0.99, top=0.93, bottom=bot, wspace=0.10)
+        bot = 0.20
+    fig.subplots_adjust(left=0.018, right=0.998, top=0.92, bottom=bot, wspace=0.08)
     out = FIG_DIR / "F06_perframe_rollout.pdf"
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".png"), dpi=150,
+                  bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     return out
 
@@ -599,45 +611,92 @@ def fig08_equivariance_test():
         return rows
 
     plotted_any = False
-    fig, ax = plt.subplots(figsize=(7.5, 4.0))
+    # Match F11/F06 sizing: 42pt titles/legend, 38pt axis, 36pt ticks.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    # Compact figure; panel extends to figure width; legend in 3x3 grid below.
+    fig, ax = plt.subplots(figsize=(15.0, 12.0))
     handles = []
+    # Floor for log scale: clamp tiny values (including exact 0 at k=N where
+    # cyclic shift is the identity) to the FP32 FFT floor so curves reach the
+    # right edge of the x-axis.
+    LOG_FLOOR = 1e-7
+    K_MAX = 64
+    # Dense k axis for spline-smoothed curves (avoids jagged looks at sparse k).
+    DENSE_X = np.linspace(1, K_MAX, 240)
     for model in MODEL_ORDER:
         rows = _rows_for(model)
         if not rows:
             continue
-        shifts = sorted(set(r[0] for r in rows))
+        shifts = np.array(sorted(set(r[0] for r in rows)))
         errs_by_shift = {s: [r[1] for r in rows if r[0] == s] for s in shifts}
         means = np.array([np.mean(errs_by_shift[s]) for s in shifts])
         stds  = np.array([np.std(errs_by_shift[s])  for s in shifts])
+        means = np.maximum(means, LOG_FLOOR)
+        # Extend curves to the right edge of the x-axis even when a model only
+        # reports values at k <= 16 (legacy sparse coverage) — repeat the last
+        # mean / std so the line visually reaches K_MAX.
+        if shifts[-1] < K_MAX:
+            shifts = np.append(shifts, K_MAX)
+            means = np.append(means, means[-1])
+            stds  = np.append(stds,  stds[-1])
+        # Smooth via cubic interpolation in log-y; fall back to linear if too
+        # few points for cubic spline.
+        kind = "cubic" if len(shifts) >= 4 else "linear"
+        try:
+            from scipy.interpolate import interp1d
+            log_means = np.log10(np.maximum(means, LOG_FLOOR))
+            interp = interp1d(shifts, log_means, kind=kind,
+                                bounds_error=False, fill_value="extrapolate")
+            x_dense = DENSE_X[(DENSE_X >= shifts[0]) & (DENSE_X <= shifts[-1])]
+            y_dense = 10 ** interp(x_dense)
+            # Std envelope on dense grid (linear interp of std).
+            interp_std = interp1d(shifts, stds, kind="linear",
+                                    bounds_error=False, fill_value="extrapolate")
+            sd_dense = interp_std(x_dense)
+        except Exception:
+            x_dense, y_dense = shifts, means
+            sd_dense = stds
         color = MODEL_COLOR.get(model, "#888")
-        line = ax.errorbar(shifts, means, yerr=stds, fmt="o-", color=color,
-                            capsize=3, lw=1.3, ms=4,
-                            label=MODEL_LABELS.get(model, model))
+        # Solid line only — no std band — for maximum saturation.
+        line, = ax.plot(x_dense, y_dense, "-", color=color, lw=4.5,
+                          solid_capstyle="round",
+                          label=MODEL_LABELS.get(model, model))
         handles.append(line)
         plotted_any = True
     if not plotted_any:
         plt.close(fig)
         return None
-    # Cyclic-FFT FP32 round-off floor: relative reconstruction error of a
-    # round-trip cyclic shift on these problem sizes is empirically in the
-    # 1e-3 to 1e-2 range. Annotated as a band, not a "pass/fail" line.
-    ax.axhspan(1e-3, 1e-2, color="grey", alpha=0.12, linewidth=0)
-    ax.text(0.98, 0.02, "FP32 FFT floor",
-             color="black", fontsize=8, ha="right", va="bottom",
-             style="italic", transform=ax.transAxes)
+    # FP32 FFT floor band — drawn as a grey hspan; identified in the legend
+    # via a matching Patch handle (no in-graph text annotation).
+    ax.axhspan(1e-7, 1e-6, color="grey", alpha=0.22, linewidth=0)
+    from matplotlib.patches import Patch
+    fp_handle = Patch(facecolor="grey", alpha=0.22, edgecolor="none",
+                       label="FP32 FFT floor")
+    handles.append(fp_handle)
     ax.set_yscale("log")
-    ax.set_xlabel("cyclic shift size $k$")
-    ax.set_ylabel(r"$\| f(\rho_k x) - \rho_k f(x) \|_2 / \|f(x)\|_2$")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16),
-               ncol=len(handles), frameon=False, fontsize=7.5,
-               columnspacing=1.0, handlelength=1.4, handletextpad=0.4)
-    ax.grid(False)
+    ax.set_xlabel("cyclic shift size $k$", fontsize=AXIS_FS)
+    ax.set_ylabel("Equivariance error", fontsize=AXIS_FS)
+    ax.tick_params(axis="both", labelsize=TICK_FS)
+    n = len(handles)
+    ncol = 3 if n >= 7 else (2 if n >= 4 else max(1, n))
+    rows_legend = int(np.ceil(n / ncol))
+    # Plenty of bot so the xlabel + 3-row legend cohabit without overlap;
+    # rely on bbox_inches="tight" at save time to trim the outer pad.
+    bot = 0.16 + 0.075 * rows_legend
+    fig.legend(handles=handles, loc="lower center",
+                bbox_to_anchor=(0.5, 0.0),
+                ncol=ncol, frameon=False, fontsize=LEGEND_FS,
+                columnspacing=1.8, handlelength=1.4, handletextpad=0.4)
+    ax.grid(True, which="major", linestyle="-", color="grey",
+             alpha=0.18, linewidth=0.6)
+    ax.set_axisbelow(True)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.11, right=0.995, top=0.97, bottom=bot)
     out = FIG_DIR / "F08_equivariance_test.pdf"
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".png"), dpi=150,
+                  bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     return out
 

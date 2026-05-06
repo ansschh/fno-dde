@@ -61,14 +61,14 @@ MODEL_ORDER = ["lemo_pc_nd", "lemo_bcorrect_nd", "fno_film_nd",
 MODEL_COLOR = {
     "lemo_pc_nd":                 "#d62728",
     "lemo_bcorrect_nd":           "#bcbd22",
-    "causal_smooth_lemo_pc_nd":   "#c49c94",
+    "causal_smooth_lemo_pc_nd":   "#ff7f0e",
     "fno_film_nd":                "#17becf",
-    "noneq_film_nd":              "#c5b0d5",
+    "noneq_film_nd":              "#9467bd",
     "memno_nd":                   "#e377c2",
     "ffno_nd":                    "#8c564b",
     "s4_nd":                      "#bcbd22",
-    "nide_nd":                    "#aec7e8",
-    "ndde_nd":                    "#98df8a",
+    "nide_nd":                    "#008080",
+    "ndde_nd":                    "#2ca02c",
 }
 
 
@@ -146,7 +146,10 @@ def main():
     if not rollouts_by_model:
         print("[F_norm_rollout] no long_rollout.npz found")
         return
-    fig, ax = plt.subplots(figsize=(8.0, 4.6))
+    # Match F11_robustness_appendix sizing.
+    TITLE_FS = 42; AXIS_FS = 38; TICK_FS = 36; LEGEND_FS = 42
+    # Smaller figsize so text-to-figure ratio matches F07 visual density.
+    fig, ax = plt.subplots(figsize=(24.0, 13.0))
 
     handles, labels = [], []
     plotted_T = 128
@@ -164,10 +167,9 @@ def main():
         q75 = np.percentile(flat, 75, axis=0)
         steps = np.arange(T)
         color = MODEL_COLOR.get(model, "#888")
-        line, = ax.plot(steps, median, color=color, lw=1.6,
+        line, = ax.plot(steps, median, color=color, lw=4.0,
+                         solid_capstyle="round",
                          label=MODEL_LABELS[model])
-        ax.fill_between(steps, q25, q75,
-                         color=color, alpha=0.15, linewidth=0)
         handles.append(line); labels.append(MODEL_LABELS[model])
 
     band = gt_norm_band(percentiles=(25, 75))
@@ -183,18 +185,27 @@ def main():
     ax.set_xlim(0, plotted_T - 1)
     ax.set_ylim(2.0, 200.0)
     ax.set_yscale("log")
-    ax.set_xlabel(r"rollout step $t$")
-    ax.set_ylabel(r"$\|\hat u(t)\|_2$ (chain mean, flattened over spatial+channel)")
-    ax.grid(False)
+    ax.set_xlabel(r"rollout step $t$", fontsize=AXIS_FS)
+    ax.set_ylabel(r"$\|\hat u(t)\|_2$", fontsize=AXIS_FS)
+    ax.tick_params(axis="both", labelsize=TICK_FS)
+    ax.grid(True, which="major", linestyle="-", color="grey",
+             alpha=0.18, linewidth=0.6)
+    ax.set_axisbelow(True)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
-    ax.legend(handles=handles, labels=labels, loc="upper center",
-               bbox_to_anchor=(0.5, -0.14),
-               ncol=min(len(handles), 6), frameon=False, fontsize=8)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    n = len(handles)
+    ncol = 5 if n >= 8 else (4 if n >= 5 else max(1, n))
+    fig.legend(handles=handles, labels=labels, loc="lower center",
+                bbox_to_anchor=(0.5, 0.0),
+                ncol=ncol, frameon=False, fontsize=LEGEND_FS,
+                columnspacing=1.4, handlelength=1.4, handletextpad=0.4)
+    rows = int(np.ceil(n / ncol))
+    bot = 0.08 + 0.09 * rows
+    fig.subplots_adjust(left=0.08, right=0.99, top=0.96, bottom=bot)
     out = FIG_DIR / "F_norm_rollout.pdf"
-    fig.savefig(out, bbox_inches="tight")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(out.with_suffix(".png"), dpi=150,
+                  bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     print(f"-> {out.name}")
     n_models = len(labels)
