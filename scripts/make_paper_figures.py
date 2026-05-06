@@ -118,27 +118,38 @@ def _discover_jsons(filename: str) -> dict:
     out = defaultdict(dict)
     seen = set()
     roots = [REPO / "extracted", REPO / "outputs"]
+    candidates = []
     for root in roots:
         if not root.exists():
             continue
-        for f in root.rglob(filename):
-            try:
-                parts = f.parts
-                seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
-            except IndexError:
-                continue
-            if fam not in FAMS or reg not in REGIMES or seed not in SEEDS:
-                continue
-            if model not in MODEL_LABELS:
-                continue
-            key = (model, fam, reg, seed)
-            if key in seen:
-                continue
-            data = _try_json(f)
-            if data is None:
-                continue
-            seen.add(key)
-            out[model][(fam, reg, seed)] = data
+        candidates.extend(root.rglob(filename))
+    # Priority: prefer paths from the post-A-fix h100 pull (cyclic_shift_full
+    # equivariance, FP32-floor LEMO-PC) over older pulls that used
+    # cyclic_shift_state_only and pre-A-fix LEMO-PC.
+    def _priority(p):
+        s = str(p).replace("\\", "/")
+        if "a_fix_runpod" in s or "h100_pull_2026_05_05" in s:
+            return 0
+        return 1
+    candidates.sort(key=_priority)
+    for f in candidates:
+        try:
+            parts = f.parts
+            seed = parts[-2]; model = parts[-3]; reg = parts[-4]; fam = parts[-5]
+        except IndexError:
+            continue
+        if fam not in FAMS or reg not in REGIMES or seed not in SEEDS:
+            continue
+        if model not in MODEL_LABELS:
+            continue
+        key = (model, fam, reg, seed)
+        if key in seen:
+            continue
+        data = _try_json(f)
+        if data is None:
+            continue
+        seen.add(key)
+        out[model][(fam, reg, seed)] = data
     return dict(out)
 
 
